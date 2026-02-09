@@ -7,31 +7,31 @@
 
 ### Daemon Foundation
 
-- [ ] **DAEM-01**: Daemon starts as background process and runs continuously with negligible idle resource usage
-- [ ] **DAEM-02**: Daemon communicates with CLI client over Unix domain socket
-- [ ] **DAEM-03**: Daemon handles graceful shutdown and crash recovery
-- [ ] **DAEM-04**: Local SQLite database stores all attribution data (WAL mode)
+- [x] **DAEM-01**: Daemon starts as background process and runs continuously with negligible idle resource usage
+- [x] **DAEM-02**: Daemon communicates with CLI client over Unix domain socket
+- [x] **DAEM-03**: Daemon handles graceful shutdown and crash recovery
+- [x] **DAEM-04**: Local SQLite database stores all attribution data (WAL mode)
 
 ### File System Watching
 
-- [ ] **FSWT-01**: Daemon watches project directory for file creation, modification, and deletion events
-- [ ] **FSWT-02**: Daemon debounces editor event storms (multiple events per save)
-- [ ] **FSWT-03**: Daemon recursively watches new subdirectories as they are created
-- [ ] **FSWT-04**: Daemon ignores configured paths (.git, node_modules, build artifacts)
+- [x] **FSWT-01**: Daemon watches project directory for file creation, modification, and deletion events
+- [x] **FSWT-02**: Daemon debounces editor event storms (multiple events per save)
+- [x] **FSWT-03**: Daemon recursively watches new subdirectories as they are created
+- [x] **FSWT-04**: Daemon ignores configured paths (.git, node_modules, build artifacts)
 
 ### Claude Code Session Parsing
 
-- [ ] **CCSP-01**: Daemon discovers and tails Claude Code JSONL session files
-- [ ] **CCSP-02**: Daemon extracts Write tool_use events with file paths and content
-- [ ] **CCSP-03**: Daemon handles new session file creation (session rotation)
-- [ ] **CCSP-04**: Parser sits behind abstraction layer for future AI tool extensibility
+- [x] **CCSP-01**: Daemon discovers and tails Claude Code JSONL session files
+- [x] **CCSP-02**: Daemon extracts Write tool_use events with file paths and content
+- [x] **CCSP-03**: Daemon handles new session file creation (session rotation)
+- [x] **CCSP-04**: Parser sits behind abstraction layer for future AI tool extensibility
 
 ### Git Integration
 
-- [ ] **GITI-01**: Parse git commits, diffs, and blame for line-level authorship
-- [ ] **GITI-02**: Handle rebases, squash merges, and renamed files correctly
-- [ ] **GITI-03**: Detect Co-Authored-By tags as AI attribution signal
-- [ ] **GITI-04**: Use git as secondary attribution source (daemon data is primary)
+- [x] **GITI-01**: Parse git commits, diffs, and blame for line-level authorship
+- [x] **GITI-02**: Handle rebases, squash merges, and renamed files correctly
+- [x] **GITI-03**: Detect Co-Authored-By tags as AI attribution signal
+- [x] **GITI-04**: Use git as secondary attribution source (daemon data is primary)
 
 ### Event Correlation
 
@@ -113,22 +113,22 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DAEM-01 | Phase 1 | Pending |
-| DAEM-02 | Phase 1 | Pending |
-| DAEM-03 | Phase 1 | Pending |
-| DAEM-04 | Phase 1 | Pending |
-| FSWT-01 | Phase 1 | Pending |
-| FSWT-02 | Phase 1 | Pending |
-| FSWT-03 | Phase 1 | Pending |
-| FSWT-04 | Phase 1 | Pending |
-| CCSP-01 | Phase 1 | Pending |
-| CCSP-02 | Phase 1 | Pending |
-| CCSP-03 | Phase 1 | Pending |
-| CCSP-04 | Phase 1 | Pending |
-| GITI-01 | Phase 1 | Pending |
-| GITI-02 | Phase 1 | Pending |
-| GITI-03 | Phase 1 | Pending |
-| GITI-04 | Phase 1 | Pending |
+| DAEM-01 | Phase 1 | Complete |
+| DAEM-02 | Phase 1 | Complete |
+| DAEM-03 | Phase 1 | Complete |
+| DAEM-04 | Phase 1 | Complete |
+| FSWT-01 | Phase 1 | Complete |
+| FSWT-02 | Phase 1 | Complete |
+| FSWT-03 | Phase 1 | Complete |
+| FSWT-04 | Phase 1 | Complete |
+| CCSP-01 | Phase 1 | Complete |
+| CCSP-02 | Phase 1 | Complete |
+| CCSP-03 | Phase 1 | Complete |
+| CCSP-04 | Phase 1 | Complete |
+| GITI-01 | Phase 1 | Complete |
+| GITI-02 | Phase 1 | Complete |
+| GITI-03 | Phase 1 | Complete |
+| GITI-04 | Phase 1 | Complete |
 | CORR-01 | Phase 2 | Pending |
 | CORR-02 | Phase 2 | Pending |
 | CORR-03 | Phase 2 | Pending |
