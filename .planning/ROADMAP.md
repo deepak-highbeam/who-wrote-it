@@ -12,7 +12,7 @@ This roadmap delivers a Go-based daemon that monitors code authorship across hum
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [x] **Phase 1: Data Pipeline** - Daemon foundation with all three input signals flowing and persisted
+- [ ] **Phase 1: Data Pipeline** - Daemon foundation with all three input signals flowing and persisted
 - [ ] **Phase 2: Intelligence** - Correlation engine, authorship spectrum, work-type classification, and meaningful AI metric
 - [ ] **Phase 3: Output** - CLI reports, GitHub PR integration, and code survival tracking
 
@@ -28,12 +28,13 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Claude Code session Write events are discovered, tailed, and parsed into structured records in the store as the developer uses Claude Code
   4. Git commits, diffs, blame data, and Co-Authored-By tags are parsed and stored, including correct handling of rebases, squash merges, and renamed files
   5. CLI client can communicate with the daemon over Unix domain socket to confirm status and data collection stats
-**Plans**: 3 plans
+**Plans**: 4 plans
 
 Plans:
 - [x] 01-01-PLAN.md -- Daemon lifecycle, SQLite store, and Unix socket IPC (Wave 1)
 - [x] 01-02-PLAN.md -- File system watcher with debouncing, filtering, and recursive watching (Wave 2)
 - [x] 01-03-PLAN.md -- Claude Code session parser and git integration (Wave 2)
+- [ ] 01-04-PLAN.md -- Gap closure: Wire session parser and git integration into daemon (Wave 1)
 
 ### Phase 2: Intelligence
 **Goal**: Raw signals are correlated and classified into a five-level authorship spectrum with work-type labels and a meaningful AI percentage metric
@@ -73,6 +74,6 @@ Phases execute in numeric order: 1 --> 2 --> 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Data Pipeline | 3/3 | Complete | 2026-02-09 |
+| 1. Data Pipeline | 3/4 | Gap closure | 2026-02-09 |
 | 2. Intelligence | 0/2 | Not started | - |
 | 3. Output | 0/2 | Not started | - |
