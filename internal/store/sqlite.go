@@ -208,3 +208,264 @@ func (s *Store) DBSizeBytes() (int64, error) {
 	}
 	return pageCount * pageSize, nil
 }
+
+// ---------------------------------------------------------------------------
+// Types for correlation and attribution queries
+// ---------------------------------------------------------------------------
+
+// FileEvent represents a file system event row from the store.
+type FileEvent struct {
+	ID          int64
+	ProjectPath string
+	FilePath    string
+	EventType   string
+	Timestamp   time.Time
+}
+
+// StoredSessionEvent represents a session event row from the store.
+type StoredSessionEvent struct {
+	ID          int64
+	SessionID   string
+	EventType   string
+	ToolName    string
+	FilePath    string
+	ContentHash string
+	Timestamp   time.Time
+}
+
+// AttributionRecord represents a row in the attributions table.
+type AttributionRecord struct {
+	ID                  int64
+	FilePath            string
+	ProjectPath         string
+	FileEventID         *int64
+	SessionEventID      *int64
+	AuthorshipLevel     string
+	Confidence          float64
+	Uncertain           bool
+	FirstAuthor         string
+	CorrelationWindowMs int
+	Timestamp           time.Time
+}
+
+// ---------------------------------------------------------------------------
+// Query methods for correlation engine
+// ---------------------------------------------------------------------------
+
+// QueryFileEventsInWindow returns file events for a given file path within
+// a time window [start, end], ordered by timestamp ascending.
+func (s *Store) QueryFileEventsInWindow(filePath string, start, end time.Time) ([]FileEvent, error) {
+	rows, err := s.db.Query(
+		`SELECT id, project_path, file_path, event_type, timestamp
+		 FROM file_events
+		 WHERE file_path = ? AND timestamp >= ? AND timestamp <= ?
+		 ORDER BY timestamp ASC`,
+		filePath,
+		start.UTC().Format(time.RFC3339Nano),
+		end.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return scanFileEvents(rows)
+}
+
+// QueryFileEventsByProject returns all file events for a project since the
+// given time, ordered by timestamp ascending.
+func (s *Store) QueryFileEventsByProject(projectPath string, since time.Time) ([]FileEvent, error) {
+	rows, err := s.db.Query(
+		`SELECT id, project_path, file_path, event_type, timestamp
+		 FROM file_events
+		 WHERE project_path = ? AND timestamp >= ?
+		 ORDER BY timestamp ASC`,
+		projectPath,
+		since.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return scanFileEvents(rows)
+}
+
+// QuerySessionEventsInWindow returns session events for a given file path
+// within a time window [start, end], filtered to Write tool_name only,
+// ordered by timestamp ascending.
+func (s *Store) QuerySessionEventsInWindow(filePath string, start, end time.Time) ([]StoredSessionEvent, error) {
+	rows, err := s.db.Query(
+		`SELECT id, session_id, event_type, tool_name, file_path, content_hash, timestamp
+		 FROM session_events
+		 WHERE file_path = ? AND tool_name = 'Write' AND timestamp >= ? AND timestamp <= ?
+		 ORDER BY timestamp ASC`,
+		filePath,
+		start.UTC().Format(time.RFC3339Nano),
+		end.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return scanSessionEvents(rows)
+}
+
+// QuerySessionEventsNearTimestamp returns Write session events within windowMs
+// milliseconds of the given timestamp, regardless of file path. Results are
+// ordered by absolute time distance ascending (closest first).
+func (s *Store) QuerySessionEventsNearTimestamp(timestamp time.Time, windowMs int) ([]StoredSessionEvent, error) {
+	// Compute the window boundaries in Go for reliable comparison.
+	windowDur := time.Duration(windowMs) * time.Millisecond
+	start := timestamp.Add(-windowDur)
+	end := timestamp.Add(windowDur)
+
+	rows, err := s.db.Query(
+		`SELECT id, session_id, event_type, tool_name, file_path, content_hash, timestamp
+		 FROM session_events
+		 WHERE tool_name = 'Write' AND timestamp >= ? AND timestamp <= ?
+		 ORDER BY timestamp ASC`,
+		start.UTC().Format(time.RFC3339Nano),
+		end.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return scanSessionEvents(rows)
+}
+
+// ---------------------------------------------------------------------------
+// Attribution persistence
+// ---------------------------------------------------------------------------
+
+// InsertAttribution persists an attribution record and returns its row ID.
+func (s *Store) InsertAttribution(attr AttributionRecord) (int64, error) {
+	uncertain := 0
+	if attr.Uncertain {
+		uncertain = 1
+	}
+	result, err := s.db.Exec(
+		`INSERT INTO attributions
+		 (file_path, project_path, file_event_id, session_event_id, authorship_level,
+		  confidence, uncertain, first_author, correlation_window_ms, timestamp, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		attr.FilePath, attr.ProjectPath,
+		attr.FileEventID, attr.SessionEventID,
+		attr.AuthorshipLevel, attr.Confidence, uncertain,
+		attr.FirstAuthor, attr.CorrelationWindowMs,
+		attr.Timestamp.UTC().Format(time.RFC3339Nano),
+		time.Now().UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
+}
+
+// QueryAttributionsByFile returns all attributions for a file, ordered by
+// timestamp ascending.
+func (s *Store) QueryAttributionsByFile(filePath string) ([]AttributionRecord, error) {
+	rows, err := s.db.Query(
+		`SELECT id, file_path, project_path, file_event_id, session_event_id,
+		        authorship_level, confidence, uncertain, first_author,
+		        correlation_window_ms, timestamp
+		 FROM attributions
+		 WHERE file_path = ?
+		 ORDER BY timestamp ASC`,
+		filePath,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return scanAttributions(rows)
+}
+
+// QueryAttributionsByProject returns all attributions for a project, ordered
+// by timestamp ascending.
+func (s *Store) QueryAttributionsByProject(projectPath string) ([]AttributionRecord, error) {
+	rows, err := s.db.Query(
+		`SELECT id, file_path, project_path, file_event_id, session_event_id,
+		        authorship_level, confidence, uncertain, first_author,
+		        correlation_window_ms, timestamp
+		 FROM attributions
+		 WHERE project_path = ?
+		 ORDER BY timestamp ASC`,
+		projectPath,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return scanAttributions(rows)
+}
+
+// ---------------------------------------------------------------------------
+// Row scanner helpers
+// ---------------------------------------------------------------------------
+
+func scanFileEvents(rows *sql.Rows) ([]FileEvent, error) {
+	var events []FileEvent
+	for rows.Next() {
+		var fe FileEvent
+		var ts string
+		if err := rows.Scan(&fe.ID, &fe.ProjectPath, &fe.FilePath, &fe.EventType, &ts); err != nil {
+			return nil, err
+		}
+		t, err := time.Parse(time.RFC3339Nano, ts)
+		if err != nil {
+			return nil, fmt.Errorf("parse file_event timestamp %q: %w", ts, err)
+		}
+		fe.Timestamp = t
+		events = append(events, fe)
+	}
+	return events, rows.Err()
+}
+
+func scanSessionEvents(rows *sql.Rows) ([]StoredSessionEvent, error) {
+	var events []StoredSessionEvent
+	for rows.Next() {
+		var se StoredSessionEvent
+		var ts string
+		if err := rows.Scan(&se.ID, &se.SessionID, &se.EventType, &se.ToolName, &se.FilePath, &se.ContentHash, &ts); err != nil {
+			return nil, err
+		}
+		t, err := time.Parse(time.RFC3339Nano, ts)
+		if err != nil {
+			return nil, fmt.Errorf("parse session_event timestamp %q: %w", ts, err)
+		}
+		se.Timestamp = t
+		events = append(events, se)
+	}
+	return events, rows.Err()
+}
+
+func scanAttributions(rows *sql.Rows) ([]AttributionRecord, error) {
+	var records []AttributionRecord
+	for rows.Next() {
+		var r AttributionRecord
+		var ts string
+		var uncertain int
+		if err := rows.Scan(
+			&r.ID, &r.FilePath, &r.ProjectPath,
+			&r.FileEventID, &r.SessionEventID,
+			&r.AuthorshipLevel, &r.Confidence, &uncertain,
+			&r.FirstAuthor, &r.CorrelationWindowMs, &ts,
+		); err != nil {
+			return nil, err
+		}
+		t, err := time.Parse(time.RFC3339Nano, ts)
+		if err != nil {
+			return nil, fmt.Errorf("parse attribution timestamp %q: %w", ts, err)
+		}
+		r.Timestamp = t
+		r.Uncertain = uncertain != 0
+		records = append(records, r)
+	}
+	return records, rows.Err()
+}

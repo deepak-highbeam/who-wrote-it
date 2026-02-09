@@ -1,7 +1,7 @@
 package store
 
 // schemaVersion is the current schema version. Increment when adding migrations.
-const schemaVersion = 1
+const schemaVersion = 2
 
 // migrations maps version numbers to SQL statements that bring the schema
 // from (version-1) to (version). Version 1 is the initial schema.
@@ -83,5 +83,28 @@ CREATE TABLE IF NOT EXISTS daemon_state (
 	value      TEXT NOT NULL DEFAULT '',
 	updated_at TEXT NOT NULL
 );
+`,
+
+	2: `
+-- Attribution records linking file events to AI session events.
+CREATE TABLE IF NOT EXISTS attributions (
+	id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+	file_path            TEXT    NOT NULL,
+	project_path         TEXT    NOT NULL,
+	file_event_id        INTEGER REFERENCES file_events(id),
+	session_event_id     INTEGER REFERENCES session_events(id),
+	authorship_level     TEXT    NOT NULL,
+	confidence           REAL    NOT NULL DEFAULT 1.0,
+	uncertain            INTEGER NOT NULL DEFAULT 0,
+	first_author         TEXT    NOT NULL DEFAULT '',
+	correlation_window_ms INTEGER NOT NULL DEFAULT 0,
+	timestamp            TEXT    NOT NULL,
+	created_at           TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_attributions_file ON attributions(file_path);
+CREATE INDEX IF NOT EXISTS idx_attributions_project ON attributions(project_path);
+CREATE INDEX IF NOT EXISTS idx_attributions_level ON attributions(authorship_level);
+CREATE INDEX IF NOT EXISTS idx_attributions_timestamp ON attributions(timestamp);
 `,
 }
