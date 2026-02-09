@@ -113,47 +113,47 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DAEM-01 | - | Pending |
-| DAEM-02 | - | Pending |
-| DAEM-03 | - | Pending |
-| DAEM-04 | - | Pending |
-| FSWT-01 | - | Pending |
-| FSWT-02 | - | Pending |
-| FSWT-03 | - | Pending |
-| FSWT-04 | - | Pending |
-| CCSP-01 | - | Pending |
-| CCSP-02 | - | Pending |
-| CCSP-03 | - | Pending |
-| CCSP-04 | - | Pending |
-| GITI-01 | - | Pending |
-| GITI-02 | - | Pending |
-| GITI-03 | - | Pending |
-| GITI-04 | - | Pending |
-| CORR-01 | - | Pending |
-| CORR-02 | - | Pending |
-| CORR-03 | - | Pending |
-| AUTH-01 | - | Pending |
-| AUTH-02 | - | Pending |
-| AUTH-03 | - | Pending |
-| WTYP-01 | - | Pending |
-| WTYP-02 | - | Pending |
-| WTYP-03 | - | Pending |
-| METR-01 | - | Pending |
-| METR-02 | - | Pending |
-| SURV-01 | - | Pending |
-| SURV-02 | - | Pending |
-| CLIO-01 | - | Pending |
-| CLIO-02 | - | Pending |
-| CLIO-03 | - | Pending |
-| GHPR-01 | - | Pending |
-| GHPR-02 | - | Pending |
-| GHPR-03 | - | Pending |
+| DAEM-01 | Phase 1 | Pending |
+| DAEM-02 | Phase 1 | Pending |
+| DAEM-03 | Phase 1 | Pending |
+| DAEM-04 | Phase 1 | Pending |
+| FSWT-01 | Phase 1 | Pending |
+| FSWT-02 | Phase 1 | Pending |
+| FSWT-03 | Phase 1 | Pending |
+| FSWT-04 | Phase 1 | Pending |
+| CCSP-01 | Phase 1 | Pending |
+| CCSP-02 | Phase 1 | Pending |
+| CCSP-03 | Phase 1 | Pending |
+| CCSP-04 | Phase 1 | Pending |
+| GITI-01 | Phase 1 | Pending |
+| GITI-02 | Phase 1 | Pending |
+| GITI-03 | Phase 1 | Pending |
+| GITI-04 | Phase 1 | Pending |
+| CORR-01 | Phase 2 | Pending |
+| CORR-02 | Phase 2 | Pending |
+| CORR-03 | Phase 2 | Pending |
+| AUTH-01 | Phase 2 | Pending |
+| AUTH-02 | Phase 2 | Pending |
+| AUTH-03 | Phase 2 | Pending |
+| WTYP-01 | Phase 2 | Pending |
+| WTYP-02 | Phase 2 | Pending |
+| WTYP-03 | Phase 2 | Pending |
+| METR-01 | Phase 2 | Pending |
+| METR-02 | Phase 2 | Pending |
+| CLIO-01 | Phase 3 | Pending |
+| CLIO-02 | Phase 3 | Pending |
+| CLIO-03 | Phase 3 | Pending |
+| GHPR-01 | Phase 3 | Pending |
+| GHPR-02 | Phase 3 | Pending |
+| GHPR-03 | Phase 3 | Pending |
+| SURV-01 | Phase 3 | Pending |
+| SURV-02 | Phase 3 | Pending |
 
 **Coverage:**
 - v1 requirements: 35 total
-- Mapped to phases: 0
-- Unmapped: 35
+- Mapped to phases: 35
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-09*
-*Last updated: 2026-02-09 after initial definition*
+*Last updated: 2026-02-09 after roadmap creation*
