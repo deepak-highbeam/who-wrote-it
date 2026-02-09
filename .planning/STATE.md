@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-09)
 ## Current Position
 
 Phase: 1 of 3 (Data Pipeline)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-02-09 -- Completed 01-01-PLAN.md (Daemon foundation)
+Last activity: 2026-02-09 -- Completed 01-02-PLAN.md (File system watcher)
 
-Progress: [█░░░░░░░░░] 14%
+Progress: [██░░░░░░░░] 29%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 6 min
-- Total execution time: 0.1 hours
+- Total plans completed: 2
+- Average duration: 5 min
+- Total execution time: 0.2 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1. Data Pipeline | 1/3 | 6 min | 6 min |
+| 1. Data Pipeline | 2/3 | 10 min | 5 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (6 min)
-- Trend: First plan, no trend yet
+- Last 5 plans: 01-01 (6 min), 01-02 (4 min)
+- Trend: Improving
 
 *Updated after each plan completion*
 
@@ -50,6 +50,9 @@ Recent decisions affecting current work:
 - Interface-based DI pattern for daemon<->IPC circular dependency resolution
 - Socket file in data dir (~/.whowroteit/) not /tmp for security
 - Go 1.25.7 installed (latest stable)
+- 100ms debounce window for file events (balances responsiveness with burst collapse)
+- Component-based path matching for ignore filter (catches nested dirs at any depth)
+- Watcher shutdown before IPC/store (ensures debounced events flush before DB closes)
 
 ### Pending Todos
 
@@ -62,6 +65,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-09T18:55:57Z
-Stopped at: Completed 01-01-PLAN.md (Daemon foundation, SQLite store, IPC)
+Last session: 2026-02-09T19:03:58Z
+Stopped at: Completed 01-02-PLAN.md (File system watcher with debouncing, filtering, recursive watching)
 Resume file: None

@@ -32,7 +32,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Plans:
 - [x] 01-01-PLAN.md -- Daemon lifecycle, SQLite store, and Unix socket IPC (Wave 1)
-- [ ] 01-02-PLAN.md -- File system watcher with debouncing, filtering, and recursive watching (Wave 2)
+- [x] 01-02-PLAN.md -- File system watcher with debouncing, filtering, and recursive watching (Wave 2)
 - [ ] 01-03-PLAN.md -- Claude Code session parser and git integration (Wave 2)
 
 ### Phase 2: Intelligence
@@ -73,6 +73,6 @@ Phases execute in numeric order: 1 --> 2 --> 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Data Pipeline | 1/3 | In progress | - |
+| 1. Data Pipeline | 2/3 | In progress | - |
 | 2. Intelligence | 0/2 | Not started | - |
 | 3. Output | 0/2 | Not started | - |
