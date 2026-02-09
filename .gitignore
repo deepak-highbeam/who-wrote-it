@@ -1,0 +1,24 @@
+# Binaries (root-level only, not cmd/whowroteit/ directory)
+/whowroteit
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Go build cache
+/vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+
+# Data directory (created at runtime)
+# ~/.whowroteit/
