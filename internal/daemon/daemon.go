@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/anthropic/who-wrote-it/internal/config"
+	"github.com/anthropic/who-wrote-it/internal/gitint"
+	"github.com/anthropic/who-wrote-it/internal/sessionparser"
 	"github.com/anthropic/who-wrote-it/internal/store"
 	"github.com/anthropic/who-wrote-it/internal/watcher"
 )
@@ -32,6 +35,11 @@ type Daemon struct {
 	ipc       IPCServer
 	watcher   *watcher.Watcher
 	startTime time.Time
+
+	sessionParser *sessionparser.ClaudeCodeParser
+	gitRepo       *gitint.Repository
+	sessionCancel context.CancelFunc
+	gitCancel     context.CancelFunc
 
 	ctx     context.Context
 	cancel  context.CancelFunc
@@ -101,6 +109,76 @@ func (d *Daemon) Start() error {
 		}()
 	}
 
+	// --- Session parser integration ---
+	// Discover existing Claude Code session files and start tailing them.
+	d.sessionParser = sessionparser.NewClaudeCodeParser("", 0)
+	sessionFiles, err := d.sessionParser.Discover(d.ctx)
+	if err != nil {
+		log.Printf("session discover error: %v", err)
+	}
+	log.Printf("discovered %d session files", len(sessionFiles))
+
+	sessionCtx, sessionCancel := context.WithCancel(d.ctx)
+	d.sessionCancel = sessionCancel
+
+	for _, sf := range sessionFiles {
+		d.startSessionTailer(sessionCtx, sf)
+	}
+
+	// Watch for new session files (e.g. session rotation).
+	newSessions := make(chan sessionparser.SessionFile, 10)
+	go func() {
+		if err := d.sessionParser.WatchForNew(sessionCtx, newSessions); err != nil {
+			log.Printf("session watcher error: %v", err)
+		}
+	}()
+	go func() {
+		for {
+			select {
+			case <-sessionCtx.Done():
+				return
+			case sf := <-newSessions:
+				d.startSessionTailer(sessionCtx, sf)
+			}
+		}
+	}()
+
+	// --- Git integration ---
+	// Open the git repository at the first watch path and start periodic sync.
+	if len(d.cfg.WatchPaths) > 0 {
+		repo, err := gitint.Open(d.cfg.WatchPaths[0], d.store)
+		if err != nil {
+			log.Printf("git open warning (not a git repo?): %v", err)
+		} else {
+			d.gitRepo = repo
+
+			gitCtx, gitCancel := context.WithCancel(d.ctx)
+			d.gitCancel = gitCancel
+
+			// Initial sync: look back 30 days.
+			if err := repo.SyncCommits(gitCtx, time.Now().Add(-gitint.DefaultLookback())); err != nil {
+				log.Printf("git initial sync error: %v", err)
+			}
+
+			// Periodic sync goroutine.
+			go func() {
+				ticker := time.NewTicker(gitint.SyncInterval())
+				defer ticker.Stop()
+				for {
+					select {
+					case <-gitCtx.Done():
+						return
+					case <-ticker.C:
+						since := time.Now().Add(-gitint.DefaultLookback())
+						if err := repo.SyncCommits(gitCtx, since); err != nil {
+							log.Printf("git sync error: %v", err)
+						}
+					}
+				}
+			}()
+		}
+	}
+
 	log.Printf("daemon started (pid %d, db %s, socket %s)", os.Getpid(), d.cfg.DBPath, d.cfg.SocketPath)
 
 	// Block until context is cancelled or IPC server fails.
@@ -130,7 +208,17 @@ func (d *Daemon) Stop() {
 func (d *Daemon) shutdown() error {
 	log.Println("shutting down...")
 
-	// Stop watcher first (drains pending debounced events to store).
+	// Cancel session tailers first (allows offset persistence before store closes).
+	if d.sessionCancel != nil {
+		d.sessionCancel()
+	}
+
+	// Cancel git sync goroutine.
+	if d.gitCancel != nil {
+		d.gitCancel()
+	}
+
+	// Stop watcher (drains pending debounced events to store).
 	if d.watcher != nil {
 		d.watcher.Stop()
 	}
@@ -183,4 +271,56 @@ func (d *Daemon) Uptime() time.Duration {
 // Config returns the daemon's configuration.
 func (d *Daemon) Config() *config.Config {
 	return d.cfg
+}
+
+// startSessionTailer starts a goroutine that tails a single session file,
+// parsing each line and storing events. It resumes from the last persisted
+// offset for the file.
+func (d *Daemon) startSessionTailer(ctx context.Context, sf sessionparser.SessionFile) {
+	// Restore offset from daemon_state for resume across daemon restarts.
+	offsetKey := "tailer_offset:" + sf.Path
+	offsetStr, _ := d.store.GetDaemonState(offsetKey)
+	var offset int64
+	if offsetStr != "" {
+		offset, _ = strconv.ParseInt(offsetStr, 10, 64)
+	}
+
+	tailer := sessionparser.NewTailer(sf.Path, offset, 0)
+	lines := make(chan []byte, 100)
+
+	go func() {
+		finalOffset, err := tailer.Tail(ctx, lines)
+		if err != nil {
+			log.Printf("session tailer %s error: %v", sf.Path, err)
+		}
+		// Persist final offset for resume.
+		_ = d.store.SetDaemonState(offsetKey, strconv.FormatInt(finalOffset, 10))
+	}()
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case line := <-lines:
+				event, err := d.sessionParser.ParseLine(line)
+				if err != nil {
+					log.Printf("session parse error: %v", err)
+					continue
+				}
+				if event == nil {
+					continue
+				}
+				event.SessionID = sf.SessionID
+				if err := d.store.InsertSessionEvent(
+					event.SessionID, event.EventType, event.ToolName,
+					event.FilePath, event.ContentHash, event.Timestamp, event.RawJSON,
+				); err != nil {
+					log.Printf("session store error: %v", err)
+				}
+			}
+		}
+	}()
+
+	log.Printf("tailing session: %s", sf.Path)
 }
