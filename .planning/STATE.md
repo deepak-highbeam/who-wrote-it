@@ -5,33 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-02-09)
 
 **Core value:** Reveal how AI is being used in development -- not vanity line counts, but the nature of human-AI collaboration on every piece of work.
-**Current focus:** Phase 2: Intelligence -- correlation engine and authorship classifier built, integration pipeline next.
+**Current focus:** Phase 2: Intelligence complete. Work-type classifier and meaningful AI metrics built. Ready for Phase 3: Interface.
 
 ## Current Position
 
 Phase: 2 of 3 (Intelligence)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-02-09 -- Completed 02-01-PLAN.md
+Plan: 2 of 2 in current phase
+Status: Phase complete
+Last activity: 2026-02-09 -- Completed 02-02-PLAN.md
 
-Progress: [█████░░░░░] 55%
+Progress: [██████░░░░] 66%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
+- Total plans completed: 6
 - Average duration: 5 min
-- Total execution time: 0.43 hours
+- Total execution time: 0.50 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. Data Pipeline | 4/4 | 19 min | 5 min |
-| 2. Intelligence | 1/2 | 5 min | 5 min |
+| 2. Intelligence | 2/2 | 10 min | 5 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-02 (4 min), 01-03 (7 min), 01-04 (2 min), 02-01 (5 min)
+- Last 5 plans: 01-03 (7 min), 01-04 (2 min), 02-01 (5 min), 02-02 (5 min)
 - Trend: Consistent
 
 *Updated after each plan completion*
@@ -65,6 +65,11 @@ Recent decisions affecting current work:
 - Exact file match preferred over time proximity in correlation
 - CorrelationResult lives in authorship package to avoid circular imports
 - Graduated confidence: 0.95 (exact <2s), 0.7 (exact 2-5s), 0.5 (proximity), 0.6 (git coauthor), 0.8 (git no coauthor)
+- Three weight tiers: high (3.0) for architecture/core_logic, medium (2.0) for bug_fix/edge_case, low (1.0) for boilerplate/test_scaffolding
+- Edge case threshold = 3 keyword occurrences (avoid false positives from single error checks)
+- CoreLogic is default fallback work type
+- Bug fix detected from commit message keywords (commit-level signal, not file content)
+- AI events = fully_ai + ai_first_human_revised only (human_first_ai_revised not counted as AI)
 
 ### Pending Todos
 
@@ -77,6 +82,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-09T20:30:00Z
-Stopped at: Completed 02-01-PLAN.md. Correlation engine and authorship classifier built with 23 tests. Ready for 02-02.
+Last session: 2026-02-09T20:38:00Z
+Stopped at: Completed 02-02-PLAN.md. Work-type classifier (6 categories) and meaningful AI metrics calculator built with 28 tests. Phase 2 complete. Ready for Phase 3.
 Resume file: None
