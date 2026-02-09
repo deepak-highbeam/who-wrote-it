@@ -1,7 +1,7 @@
 package store
 
 // schemaVersion is the current schema version. Increment when adding migrations.
-const schemaVersion = 2
+const schemaVersion = 3
 
 // migrations maps version numbers to SQL statements that bring the schema
 // from (version-1) to (version). Version 1 is the initial schema.
@@ -106,5 +106,22 @@ CREATE INDEX IF NOT EXISTS idx_attributions_file ON attributions(file_path);
 CREATE INDEX IF NOT EXISTS idx_attributions_project ON attributions(project_path);
 CREATE INDEX IF NOT EXISTS idx_attributions_level ON attributions(authorship_level);
 CREATE INDEX IF NOT EXISTS idx_attributions_timestamp ON attributions(timestamp);
+`,
+
+	3: `
+-- Work-type overrides from user corrections.
+CREATE TABLE IF NOT EXISTS work_type_overrides (
+	id          INTEGER PRIMARY KEY AUTOINCREMENT,
+	file_path   TEXT NOT NULL,
+	commit_hash TEXT NOT NULL DEFAULT '',
+	work_type   TEXT NOT NULL,
+	created_at  TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_work_type_override_file_commit
+	ON work_type_overrides(file_path, commit_hash);
+
+-- Add work_type column to attributions table.
+ALTER TABLE attributions ADD COLUMN work_type TEXT NOT NULL DEFAULT '';
 `,
 }

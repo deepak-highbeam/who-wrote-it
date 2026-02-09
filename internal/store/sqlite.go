@@ -406,6 +406,98 @@ func (s *Store) QueryAttributionsByProject(projectPath string) ([]AttributionRec
 }
 
 // ---------------------------------------------------------------------------
+// Work-type override and metrics queries
+// ---------------------------------------------------------------------------
+
+// AttributionWithWorkType extends AttributionRecord with the work_type field.
+type AttributionWithWorkType struct {
+	AttributionRecord
+	WorkType string
+}
+
+// InsertWorkTypeOverride upserts a user-supplied work-type override for a
+// specific file path and optional commit hash. Passing an empty commitHash
+// creates a file-level override (applies to all commits for that file).
+func (s *Store) InsertWorkTypeOverride(filePath, commitHash string, workType string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.db.Exec(
+		`INSERT INTO work_type_overrides (file_path, commit_hash, work_type, created_at)
+		 VALUES (?, ?, ?, ?)
+		 ON CONFLICT(file_path, commit_hash) DO UPDATE
+		   SET work_type = excluded.work_type, created_at = excluded.created_at`,
+		filePath, commitHash, workType, now,
+	)
+	return err
+}
+
+// QueryWorkTypeOverride returns the user-overridden work type for a specific
+// file path and commit hash. Returns (workType, found, error).
+func (s *Store) QueryWorkTypeOverride(filePath, commitHash string) (string, bool, error) {
+	var wt string
+	err := s.db.QueryRow(
+		`SELECT work_type FROM work_type_overrides
+		 WHERE file_path = ? AND commit_hash = ?`,
+		filePath, commitHash,
+	).Scan(&wt)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return wt, true, nil
+}
+
+// UpdateAttributionWorkType sets the work_type field on an attribution record.
+func (s *Store) UpdateAttributionWorkType(attrID int64, workType string) error {
+	_, err := s.db.Exec(
+		`UPDATE attributions SET work_type = ? WHERE id = ?`,
+		workType, attrID,
+	)
+	return err
+}
+
+// QueryAttributionsWithWorkType returns all attributions for a project that
+// have a non-empty work_type, ordered by timestamp ascending.
+func (s *Store) QueryAttributionsWithWorkType(projectPath string) ([]AttributionWithWorkType, error) {
+	rows, err := s.db.Query(
+		`SELECT id, file_path, project_path, file_event_id, session_event_id,
+		        authorship_level, confidence, uncertain, first_author,
+		        correlation_window_ms, timestamp, work_type
+		 FROM attributions
+		 WHERE project_path = ? AND work_type != ''
+		 ORDER BY timestamp ASC`,
+		projectPath,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return scanAttributionsWithWorkType(rows)
+}
+
+// QueryAttributionsByFileWithWorkType returns all attributions for a file that
+// have a non-empty work_type, ordered by timestamp ascending.
+func (s *Store) QueryAttributionsByFileWithWorkType(filePath string) ([]AttributionWithWorkType, error) {
+	rows, err := s.db.Query(
+		`SELECT id, file_path, project_path, file_event_id, session_event_id,
+		        authorship_level, confidence, uncertain, first_author,
+		        correlation_window_ms, timestamp, work_type
+		 FROM attributions
+		 WHERE file_path = ? AND work_type != ''
+		 ORDER BY timestamp ASC`,
+		filePath,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return scanAttributionsWithWorkType(rows)
+}
+
+// ---------------------------------------------------------------------------
 // Row scanner helpers
 // ---------------------------------------------------------------------------
 
@@ -456,6 +548,32 @@ func scanAttributions(rows *sql.Rows) ([]AttributionRecord, error) {
 			&r.FileEventID, &r.SessionEventID,
 			&r.AuthorshipLevel, &r.Confidence, &uncertain,
 			&r.FirstAuthor, &r.CorrelationWindowMs, &ts,
+		); err != nil {
+			return nil, err
+		}
+		t, err := time.Parse(time.RFC3339Nano, ts)
+		if err != nil {
+			return nil, fmt.Errorf("parse attribution timestamp %q: %w", ts, err)
+		}
+		r.Timestamp = t
+		r.Uncertain = uncertain != 0
+		records = append(records, r)
+	}
+	return records, rows.Err()
+}
+
+func scanAttributionsWithWorkType(rows *sql.Rows) ([]AttributionWithWorkType, error) {
+	var records []AttributionWithWorkType
+	for rows.Next() {
+		var r AttributionWithWorkType
+		var ts string
+		var uncertain int
+		if err := rows.Scan(
+			&r.ID, &r.FilePath, &r.ProjectPath,
+			&r.FileEventID, &r.SessionEventID,
+			&r.AuthorshipLevel, &r.Confidence, &uncertain,
+			&r.FirstAuthor, &r.CorrelationWindowMs, &ts,
+			&r.WorkType,
 		); err != nil {
 			return nil, err
 		}
