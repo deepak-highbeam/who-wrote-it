@@ -23,6 +23,7 @@ func main() {
 	rootCmd.AddCommand(startCmd())
 	rootCmd.AddCommand(stopCmd())
 	rootCmd.AddCommand(statusCmd())
+	rootCmd.AddCommand(pingCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -98,6 +99,28 @@ func stopCmd() *cobra.Command {
 			}
 
 			fmt.Println("daemon stopping")
+			return nil
+		},
+	}
+}
+
+func pingCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "ping",
+		Short: "Check if daemon is alive",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load(config.ConfigPath())
+			if err != nil {
+				return fmt.Errorf("load config: %w", err)
+			}
+
+			client := ipc.NewClient(cfg.SocketPath)
+			if err := client.Ping(); err != nil {
+				fmt.Println("daemon is not running")
+				return err
+			}
+
+			fmt.Println("daemon is alive")
 			return nil
 		},
 	}
