@@ -49,8 +49,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: Event correlation engine and five-level authorship classification
-- [ ] 02-02: Work-type classification and meaningful AI metric
+- [ ] 02-01-PLAN.md -- Event correlation engine and five-level authorship classification (Wave 1)
+- [ ] 02-02-PLAN.md -- Work-type classification and meaningful AI metric (Wave 2)
 
 ### Phase 3: Output
 **Goal**: Users can see attribution and classification results through CLI reports, GitHub PR comments, and code survival analysis
