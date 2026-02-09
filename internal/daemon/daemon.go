@@ -10,6 +10,7 @@ import (
 
 	"github.com/anthropic/who-wrote-it/internal/config"
 	"github.com/anthropic/who-wrote-it/internal/store"
+	"github.com/anthropic/who-wrote-it/internal/watcher"
 )
 
 // IPCServer is the interface the daemon uses to start/stop the IPC listener.
@@ -29,6 +30,7 @@ type Daemon struct {
 	cfg       *config.Config
 	store     *store.Store
 	ipc       IPCServer
+	watcher   *watcher.Watcher
 	startTime time.Time
 
 	ctx     context.Context
@@ -89,6 +91,16 @@ func (d *Daemon) Start() error {
 		ipcErrCh <- d.ipc.Listen(d.cfg.SocketPath, d.ctx)
 	}()
 
+	// Start file system watcher if watch paths are configured.
+	if len(d.cfg.WatchPaths) > 0 {
+		d.watcher = watcher.New(s, d.cfg)
+		go func() {
+			if err := d.watcher.Start(d.ctx); err != nil {
+				log.Printf("watcher error: %v", err)
+			}
+		}()
+	}
+
 	log.Printf("daemon started (pid %d, db %s, socket %s)", os.Getpid(), d.cfg.DBPath, d.cfg.SocketPath)
 
 	// Block until context is cancelled or IPC server fails.
@@ -118,7 +130,12 @@ func (d *Daemon) Stop() {
 func (d *Daemon) shutdown() error {
 	log.Println("shutting down...")
 
-	// Stop IPC server first (stops accepting, drains connections).
+	// Stop watcher first (drains pending debounced events to store).
+	if d.watcher != nil {
+		d.watcher.Stop()
+	}
+
+	// Stop IPC server (stops accepting, drains connections).
 	if d.ipc != nil {
 		if err := d.ipc.Stop(); err != nil {
 			log.Printf("ipc stop: %v", err)

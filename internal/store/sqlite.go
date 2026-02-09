@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"time"
 
 	_ "modernc.org/sqlite" // Pure Go SQLite driver.
 )
@@ -74,6 +75,16 @@ func (s *Store) GitCommitsCount() (int64, error) {
 	var count int64
 	err := s.db.QueryRow("SELECT COUNT(*) FROM git_commits").Scan(&count)
 	return count, err
+}
+
+// InsertFileEvent records a file system event in the store.
+func (s *Store) InsertFileEvent(projectPath, filePath, eventType string, timestamp time.Time) error {
+	_, err := s.db.Exec(
+		`INSERT INTO file_events (project_path, file_path, event_type, timestamp)
+		 VALUES (?, ?, ?, ?)`,
+		projectPath, filePath, eventType, timestamp.UTC().Format(time.RFC3339Nano),
+	)
+	return err
 }
 
 // DBSizeBytes returns the database file size in bytes.
