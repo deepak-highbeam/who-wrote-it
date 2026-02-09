@@ -5,33 +5,34 @@
 See: .planning/PROJECT.md (updated 2026-02-09)
 
 **Core value:** Reveal how AI is being used in development -- not vanity line counts, but the nature of human-AI collaboration on every piece of work.
-**Current focus:** Phase 1 complete. Next: Phase 2: Intelligence
+**Current focus:** Phase 2: Intelligence -- correlation engine and authorship classifier built, integration pipeline next.
 
 ## Current Position
 
-Phase: 1 of 3 (Data Pipeline) -- COMPLETE ✓
-Plan: 4 of 4 in current phase
-Status: Phase complete, verified (5/5 must-haves passed)
-Last activity: 2026-02-09 -- Phase 1 verified and complete
+Phase: 2 of 3 (Intelligence)
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-02-09 -- Completed 02-01-PLAN.md
 
-Progress: [████░░░░░░] 50%
+Progress: [█████░░░░░] 55%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
+- Total plans completed: 5
 - Average duration: 5 min
-- Total execution time: 0.35 hours
+- Total execution time: 0.43 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. Data Pipeline | 4/4 | 19 min | 5 min |
+| 2. Intelligence | 1/2 | 5 min | 5 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (6 min), 01-02 (4 min), 01-03 (7 min), 01-04 (2 min)
-- Trend: Consistent, gap closure fast
+- Last 5 plans: 01-02 (4 min), 01-03 (7 min), 01-04 (2 min), 02-01 (5 min)
+- Trend: Consistent
 
 *Updated after each plan completion*
 
@@ -60,6 +61,10 @@ Recent decisions affecting current work:
 - go-git/go-git/v5 pure Go git library (no CGO, consistent with project approach)
 - Per-subsystem context.WithCancel for independent goroutine lifecycle management
 - Non-fatal subsystem errors (session/git failures logged, daemon stays alive)
+- 5s default correlation window, configurable via Correlator.WindowMs
+- Exact file match preferred over time proximity in correlation
+- CorrelationResult lives in authorship package to avoid circular imports
+- Graduated confidence: 0.95 (exact <2s), 0.7 (exact 2-5s), 0.5 (proximity), 0.6 (git coauthor), 0.8 (git no coauthor)
 
 ### Pending Todos
 
@@ -72,6 +77,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-09T19:30:00Z
-Stopped at: Phase 1 verified and complete. All 16 requirements marked Complete. Ready for Phase 2.
+Last session: 2026-02-09T20:30:00Z
+Stopped at: Completed 02-01-PLAN.md. Correlation engine and authorship classifier built with 23 tests. Ready for 02-02.
 Resume file: None
