@@ -31,9 +31,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: Daemon lifecycle, SQLite store, and Unix socket IPC
-- [ ] 01-02: File system watcher with debouncing, filtering, and recursive watching
-- [ ] 01-03: Claude Code session parser and git integration
+- [ ] 01-01-PLAN.md -- Daemon lifecycle, SQLite store, and Unix socket IPC (Wave 1)
+- [ ] 01-02-PLAN.md -- File system watcher with debouncing, filtering, and recursive watching (Wave 2)
+- [ ] 01-03-PLAN.md -- Claude Code session parser and git integration (Wave 2)
 
 ### Phase 2: Intelligence
 **Goal**: Raw signals are correlated and classified into a five-level authorship spectrum with work-type labels and a meaningful AI percentage metric
