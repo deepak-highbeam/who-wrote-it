@@ -5,33 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-02-09)
 
 **Core value:** Reveal how AI is being used in development -- not vanity line counts, but the nature of human-AI collaboration on every piece of work.
-**Current focus:** Phase 1: Data Pipeline
+**Current focus:** Phase 1: Data Pipeline (complete)
 
 ## Current Position
 
 Phase: 1 of 3 (Data Pipeline)
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-02-09 -- Completed 01-02-PLAN.md (File system watcher)
+Plan: 3 of 3 in current phase
+Status: Phase complete
+Last activity: 2026-02-09 -- Completed 01-03-PLAN.md (Session parser and git integration)
 
-Progress: [██░░░░░░░░] 29%
+Progress: [███░░░░░░░] 43%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
-- Average duration: 5 min
-- Total execution time: 0.2 hours
+- Total plans completed: 3
+- Average duration: 6 min
+- Total execution time: 0.3 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1. Data Pipeline | 2/3 | 10 min | 5 min |
+| 1. Data Pipeline | 3/3 | 17 min | 6 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (6 min), 01-02 (4 min)
-- Trend: Improving
+- Last 5 plans: 01-01 (6 min), 01-02 (4 min), 01-03 (7 min)
+- Trend: Consistent
 
 *Updated after each plan completion*
 
@@ -53,6 +53,11 @@ Recent decisions affecting current work:
 - 100ms debounce window for file events (balances responsiveness with burst collapse)
 - Component-based path matching for ignore filter (catches nested dirs at any depth)
 - Watcher shutdown before IPC/store (ensures debounced events flush before DB closes)
+- Defensive JSONL parsing with fast-path skip for non-tool_use lines
+- Polling-based tailer (500ms) over fsnotify for individual file append monitoring
+- Selective blame (changed files only) to keep git sync fast
+- Merge commits diff against first parent only (standard git behavior)
+- go-git/go-git/v5 pure Go git library (no CGO, consistent with project approach)
 
 ### Pending Todos
 
@@ -60,11 +65,12 @@ None.
 
 ### Blockers/Concerns
 
-- Claude Code JSONL format has no stability contract -- abstraction layer critical in Phase 1
+- Claude Code JSONL format has no stability contract -- SessionProvider abstraction layer built to isolate this risk
 - Background daemonization not yet implemented (foreground only) -- fine for development
+- Daemon integration not yet wired (session parser and git packages built independently, need goroutine orchestration)
 
 ## Session Continuity
 
-Last session: 2026-02-09T19:03:58Z
-Stopped at: Completed 01-02-PLAN.md (File system watcher with debouncing, filtering, recursive watching)
+Last session: 2026-02-09T19:07:25Z
+Stopped at: Completed 01-03-PLAN.md (Session parser and git integration). Phase 1 complete.
 Resume file: None
