@@ -2,7 +2,7 @@
 
 ## What This Is
 
-An always-on development intelligence tool that monitors how code gets written and attributes contributions not just by authorship (human vs AI) but by type of work — architecture decisions, core logic, boilerplate, bug identification, edge case handling. When a PR is created, it generates a report showing the collaboration pattern: who drove what. Built in Go or Rust for maximum performance.
+An always-on Go daemon that monitors how code gets written in real-time, attributing contributions not just by authorship (human vs AI) but by type of work — architecture decisions, core logic, boilerplate, bug fixes, edge case handling, test scaffolding. Generates CLI reports, GitHub PR collaboration summaries, and code survival analytics showing how AI-written code persists over time.
 
 ## Core Value
 
@@ -12,54 +12,69 @@ Reveal **how** AI is being used in development — not vanity line counts, but t
 
 ### Validated
 
-(None yet — ship to validate)
+- ✓ Background daemon watches code being written in real-time — v1.0
+- ✓ Ingests Claude Code session data to understand AI contributions — v1.0
+- ✓ Monitors file system events to correlate changes with active processes — v1.0
+- ✓ Uses git history (blame, annotate, Co-Authored-By) as attribution signal — v1.0
+- ✓ Classifies contributions by type of work: architecture, core logic, boilerplate, bug fixes, edge case handling, test scaffolding — v1.0
+- ✓ Distinguishes the five authorship categories: fully AI, AI-first then human-revised, human-first then AI-revised, human-written but AI-suggested, fully human — v1.0
+- ✓ CLI report output for local use — v1.0
+- ✓ GitHub PR comment with summary stats and collaboration breakdown — v1.0
+- ✓ Per-file authorship and work-type breakdown — v1.0
+- ✓ AI code survival tracking across subsequent commits — v1.0
+- ✓ Meaningful AI % metric weighted by work type — v1.0
 
 ### Active
 
-- [ ] Background daemon watches code being written in real-time
-- [ ] Ingests Claude Code session data to understand AI contributions
-- [ ] Monitors file system events to correlate changes with active processes
-- [ ] Uses git history (blame, annotate, Co-Authored-By) as attribution signal
-- [ ] Classifies contributions by type of work: architecture decisions, core logic, boilerplate, bug fixes, edge case handling, test scaffolding
 - [ ] Tracks decision attribution: who initiated the approach, not just who typed
-- [ ] Distinguishes the five authorship categories: fully AI, AI-first then human-revised, human-first then AI-revised, human-written but AI-suggested, fully human
-- [ ] Generates PR report on PR creation with collaboration pattern breakdown
-- [ ] CLI report output for local use
-- [ ] GitHub PR comment with summary stats and collaboration breakdown
 - [ ] Tracks trends over time across PRs
-- [ ] Per-file authorship and work-type breakdown
+- [ ] Collaboration pattern flow visualization (who initiated, who refined)
+- [ ] Web dashboard for local data visualization
+- [ ] Multi-repo aggregated analysis
+- [ ] Additional AI tool support (Copilot, Cursor, Codeium)
 
 ### Out of Scope
 
-- Multi-AI tool support in v1 — Claude Code only first, extensible architecture for later
+- Developer rankings / leaderboards — creates perverse incentives, gaming, surveillance feel
+- AI code percentage as KPI — meaningless without work-type context
+- Screen monitoring / keylogging — privacy violation, destroys trust
+- Automated performance scoring — no tool has solved this without backlash
+- PR blocking based on AI % — arbitrary thresholds punish good AI collaboration
+- Predictive delegation suggestions — moves from analysis to recommendation (much harder problem)
+- LLM-based classification — higher latency, API costs, non-deterministic; heuristics first
+- Cloud/SaaS deployment — local-first is both a simplification and a differentiator
 - Enterprise features (team dashboards, org-wide analytics) — internal team tool for now
-- Keystroke logging / keylogger approach — use session data and file events instead
-- LLM-based classification — use heuristic/deterministic classifier first
 
 ## Context
 
-- Originated from internal team discussion about measuring AI contribution to codebases
-- The core insight: raw "% AI-written" is misleading — import statements and boilerplate inflate numbers without reflecting real AI leverage
-- What matters: understanding the collaboration pattern — did AI drive architecture or just fill in implementation? Did the human identify the bug or did AI?
-- Claude Code provides session data that can be parsed to understand what was generated vs what was human-authored
-- git-annotate (https://git-scm.com/docs/git-annotate) is a foundation for line-level attribution
-- Target users: the team itself, developers wanting insight into their AI usage patterns
+Shipped v1.0 with 8,815 LOC Go across 40 source files.
+Tech stack: Go 1.25, modernc.org/sqlite (pure Go), fsnotify, go-git, cobra CLI.
+105 tests across 11 packages, all passing with race detector.
+Pure Go build (no CGO) for clean cross-compilation.
+
+Initial architecture proven: daemon -> file events + session events + git data -> correlation -> authorship classification -> work-type classification -> reports/PR comments/survival tracking.
 
 ## Constraints
 
-- **Language**: Go or Rust — performance-critical daemon that runs continuously
-- **AI Tool**: Claude Code integration first, design for extensibility to Copilot/Cursor later
-- **Privacy**: All data stays local, no telemetry — this is sensitive development activity data
+- **Language**: Go — chosen for simpler concurrency, go-git pure Go library, I/O-bound daemon workload
+- **AI Tool**: Claude Code integration first, SessionProvider interface designed for Copilot/Cursor extensibility
+- **Privacy**: All data stays local, no telemetry — sensitive development activity data
 - **Performance**: Daemon must have negligible CPU/memory footprint when idle
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Go or Rust (TBD) | Both offer performance; Go has simpler concurrency, Rust has stronger guarantees | -- Pending |
-| Heuristic classifier over LLM | Lower latency, runs locally, no API costs, deterministic | -- Pending |
-| Claude Code first | Team uses Claude Code; tighter integration yields better signal | -- Pending |
-| Work-type classification over line counting | Line counts are vanity metrics; work-type reveals actual AI leverage | -- Pending |
+| Go over Rust | I/O-bound daemon, go-git pure Go, simpler concurrency | ✓ Good — 8.8K LOC in 1 day, pure Go build |
+| Heuristic classifier over LLM | Lower latency, runs locally, no API costs, deterministic | ✓ Good — 6 work types, user overrides for corrections |
+| Claude Code first | Team uses Claude Code; tighter integration yields better signal | ✓ Good — SessionProvider abstraction ready for expansion |
+| Work-type classification over line counting | Line counts are vanity metrics; work-type reveals actual AI leverage | ✓ Good — meaningful AI % weights architecture 3x over boilerplate |
+| modernc.org/sqlite (pure Go) | No CGO, clean cross-compilation, simpler build | ✓ Good — zero build issues, WAL mode works well |
+| Interface-based DI | Break daemon<->IPC circular dependency cleanly | ✓ Good — clean import graph, acyclic dependencies |
+| 5s correlation window | Tight time matching for file-to-session correlation | ✓ Good — graduated confidence (0.95 to 0.5) |
+| Content-hash survival tracking | Compare attribution hashes against blame line hashes | ✓ Good — simple, deterministic |
+| No external GitHub SDK | Standard net/http for REST API calls | ✓ Good — minimal dependencies |
+| Daemon data primary, git secondary | Squash merges destroy history; daemon has richer real-time signal | ✓ Good — git fallback works for repos without daemon data |
 
 ---
-*Last updated: 2026-02-09 after initialization*
+*Last updated: 2026-02-09 after v1.0 milestone*
