@@ -406,6 +406,36 @@ func (s *Store) QueryAttributionsByProject(projectPath string) ([]AttributionRec
 }
 
 // ---------------------------------------------------------------------------
+// Unprocessed file events query (for attribution pipeline)
+// ---------------------------------------------------------------------------
+
+// QueryUnprocessedFileEvents returns file events that have no matching
+// attribution record. Uses a LEFT JOIN against attributions on file_event_id
+// to find unprocessed events. Ordered by timestamp ascending so oldest events
+// are processed first. Limits to batchSize rows per call to bound processing
+// time. If batchSize <= 0, defaults to 100.
+func (s *Store) QueryUnprocessedFileEvents(batchSize int) ([]FileEvent, error) {
+	if batchSize <= 0 {
+		batchSize = 100
+	}
+	rows, err := s.db.Query(
+		`SELECT fe.id, fe.project_path, fe.file_path, fe.event_type, fe.timestamp
+		 FROM file_events fe
+		 LEFT JOIN attributions a ON a.file_event_id = fe.id
+		 WHERE a.id IS NULL
+		 ORDER BY fe.timestamp ASC
+		 LIMIT ?`,
+		batchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return scanFileEvents(rows)
+}
+
+// ---------------------------------------------------------------------------
 // Work-type override and metrics queries
 // ---------------------------------------------------------------------------
 

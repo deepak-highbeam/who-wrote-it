@@ -9,11 +9,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/anthropic/who-wrote-it/internal/authorship"
 	"github.com/anthropic/who-wrote-it/internal/config"
+	"github.com/anthropic/who-wrote-it/internal/correlation"
 	"github.com/anthropic/who-wrote-it/internal/gitint"
 	"github.com/anthropic/who-wrote-it/internal/sessionparser"
 	"github.com/anthropic/who-wrote-it/internal/store"
 	"github.com/anthropic/who-wrote-it/internal/watcher"
+	"github.com/anthropic/who-wrote-it/internal/worktype"
 )
 
 // IPCServer is the interface the daemon uses to start/stop the IPC listener.
@@ -40,6 +43,7 @@ type Daemon struct {
 	gitRepo       *gitint.Repository
 	sessionCancel context.CancelFunc
 	gitCancel     context.CancelFunc
+	attrCancel    context.CancelFunc
 
 	ctx     context.Context
 	cancel  context.CancelFunc
@@ -179,6 +183,14 @@ func (d *Daemon) Start() error {
 		}
 	}
 
+	// --- Attribution processor ---
+	// Background goroutine that processes file events into attributions
+	// by running the correlation engine, authorship classifier, and work-type
+	// classifier on each unprocessed file event.
+	attrCtx, attrCancel := context.WithCancel(d.ctx)
+	d.attrCancel = attrCancel
+	d.startAttributionProcessor(attrCtx)
+
 	log.Printf("daemon started (pid %d, db %s, socket %s)", os.Getpid(), d.cfg.DBPath, d.cfg.SocketPath)
 
 	// Block until context is cancelled or IPC server fails.
@@ -216,6 +228,11 @@ func (d *Daemon) shutdown() error {
 	// Cancel git sync goroutine.
 	if d.gitCancel != nil {
 		d.gitCancel()
+	}
+
+	// Cancel attribution processor (after session and git have flushed).
+	if d.attrCancel != nil {
+		d.attrCancel()
 	}
 
 	// Stop watcher (drains pending debounced events to store).
@@ -323,4 +340,79 @@ func (d *Daemon) startSessionTailer(ctx context.Context, sf sessionparser.Sessio
 	}()
 
 	log.Printf("tailing session: %s", sf.Path)
+}
+
+// startAttributionProcessor runs a background goroutine that periodically
+// queries for unprocessed file events and runs them through the full
+// attribution pipeline: correlation -> authorship classification ->
+// work-type classification -> store.
+func (d *Daemon) startAttributionProcessor(ctx context.Context) {
+	correlator := correlation.New(d.store)
+	classifier := authorship.NewClassifier()
+	wtClassifier := worktype.NewClassifier(d.store)
+
+	go func() {
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				events, err := d.store.QueryUnprocessedFileEvents(100)
+				if err != nil {
+					log.Printf("attribution: query error: %v", err)
+					continue
+				}
+				if len(events) == 0 {
+					continue
+				}
+
+				for _, fe := range events {
+					// Step 1: Correlate file event with session events.
+					result, err := correlator.CorrelateFileEvent(fe)
+					if err != nil {
+						log.Printf("attribution: correlate error for %s: %v", fe.FilePath, err)
+						continue
+					}
+
+					// Step 2: Classify authorship level.
+					attr := classifier.Classify(*result)
+
+					// Step 3: Classify work type (empty diff/commit -- path heuristics still work).
+					wt := wtClassifier.ClassifyFile(attr.FilePath, "", "")
+
+					// Step 4: Build store record and persist.
+					record := store.AttributionRecord{
+						FilePath:            attr.FilePath,
+						ProjectPath:         attr.ProjectPath,
+						FileEventID:         attr.FileEventID,
+						SessionEventID:      attr.SessionEventID,
+						AuthorshipLevel:     string(attr.Level),
+						Confidence:          attr.Confidence,
+						Uncertain:           attr.Uncertain,
+						FirstAuthor:         attr.FirstAuthor,
+						CorrelationWindowMs: attr.CorrelationWindowMs,
+						Timestamp:           attr.Timestamp,
+					}
+
+					id, err := d.store.InsertAttribution(record)
+					if err != nil {
+						log.Printf("attribution: insert error for %s: %v", fe.FilePath, err)
+						continue
+					}
+
+					// Step 5: Set work type on the attribution record.
+					if id > 0 {
+						if err := d.store.UpdateAttributionWorkType(id, string(wt)); err != nil {
+							log.Printf("attribution: update work type error for %s: %v", fe.FilePath, err)
+						}
+					}
+				}
+
+				log.Printf("attribution: processed %d events", len(events))
+			}
+		}
+	}()
 }
