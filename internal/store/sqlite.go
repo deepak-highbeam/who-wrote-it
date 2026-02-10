@@ -562,6 +562,109 @@ func scanAttributions(rows *sql.Rows) ([]AttributionRecord, error) {
 	return records, rows.Err()
 }
 
+// ---------------------------------------------------------------------------
+// Blame and survival queries
+// ---------------------------------------------------------------------------
+
+// QueryBlameLinesByFile returns all blame lines for a given file path.
+func (s *Store) QueryBlameLinesByFile(filePath string) ([]BlameLine, error) {
+	rows, err := s.db.Query(
+		`SELECT line_number, commit_hash, author, content_hash
+		 FROM git_blame_lines
+		 WHERE file_path = ?
+		 ORDER BY line_number ASC`,
+		filePath,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var lines []BlameLine
+	for rows.Next() {
+		var bl BlameLine
+		if err := rows.Scan(&bl.LineNumber, &bl.CommitHash, &bl.Author, &bl.ContentHash); err != nil {
+			return nil, err
+		}
+		lines = append(lines, bl)
+	}
+	return lines, rows.Err()
+}
+
+// QuerySessionEventByID returns a single session event by its row ID.
+func (s *Store) QuerySessionEventByID(id int64) (*StoredSessionEvent, error) {
+	var se StoredSessionEvent
+	var ts string
+	err := s.db.QueryRow(
+		`SELECT id, session_id, event_type, tool_name, file_path, content_hash, timestamp
+		 FROM session_events
+		 WHERE id = ?`,
+		id,
+	).Scan(&se.ID, &se.SessionID, &se.EventType, &se.ToolName, &se.FilePath, &se.ContentHash, &ts)
+	if err != nil {
+		return nil, err
+	}
+	t, err := time.Parse(time.RFC3339Nano, ts)
+	if err != nil {
+		return nil, fmt.Errorf("parse session_event timestamp %q: %w", ts, err)
+	}
+	se.Timestamp = t
+	return &se, nil
+}
+
+// InsertSurvivalRecord persists a code survival check result.
+func (s *Store) InsertSurvivalRecord(filePath, projectPath string, attributionID int64, survived bool, blameCommitHash string) error {
+	surv := 0
+	if survived {
+		surv = 1
+	}
+	_, err := s.db.Exec(
+		`INSERT INTO code_survival (file_path, project_path, attribution_id, survived, checked_at, blame_commit_hash)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		filePath, projectPath, attributionID, surv,
+		time.Now().UTC().Format(time.RFC3339), blameCommitHash,
+	)
+	return err
+}
+
+// SurvivalRecord represents a row in the code_survival table.
+type SurvivalRecord struct {
+	ID              int64
+	FilePath        string
+	ProjectPath     string
+	AttributionID   int64
+	Survived        bool
+	CheckedAt       string
+	BlameCommitHash string
+}
+
+// QuerySurvivalByProject returns all survival records for a project.
+func (s *Store) QuerySurvivalByProject(projectPath string) ([]SurvivalRecord, error) {
+	rows, err := s.db.Query(
+		`SELECT id, file_path, project_path, attribution_id, survived, checked_at, blame_commit_hash
+		 FROM code_survival
+		 WHERE project_path = ?
+		 ORDER BY id ASC`,
+		projectPath,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []SurvivalRecord
+	for rows.Next() {
+		var r SurvivalRecord
+		var surv int
+		if err := rows.Scan(&r.ID, &r.FilePath, &r.ProjectPath, &r.AttributionID, &surv, &r.CheckedAt, &r.BlameCommitHash); err != nil {
+			return nil, err
+		}
+		r.Survived = surv != 0
+		records = append(records, r)
+	}
+	return records, rows.Err()
+}
+
 func scanAttributionsWithWorkType(rows *sql.Rows) ([]AttributionWithWorkType, error) {
 	var records []AttributionWithWorkType
 	for rows.Next() {

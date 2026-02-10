@@ -1,7 +1,7 @@
 package store
 
 // schemaVersion is the current schema version. Increment when adding migrations.
-const schemaVersion = 3
+const schemaVersion = 4
 
 // migrations maps version numbers to SQL statements that bring the schema
 // from (version-1) to (version). Version 1 is the initial schema.
@@ -123,5 +123,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_work_type_override_file_commit
 
 -- Add work_type column to attributions table.
 ALTER TABLE attributions ADD COLUMN work_type TEXT NOT NULL DEFAULT '';
+`,
+
+	4: `
+-- Code survival tracking: compares AI attributions against current git blame.
+CREATE TABLE IF NOT EXISTS code_survival (
+	id                INTEGER PRIMARY KEY AUTOINCREMENT,
+	file_path         TEXT    NOT NULL,
+	project_path      TEXT    NOT NULL,
+	attribution_id    INTEGER NOT NULL REFERENCES attributions(id),
+	survived          INTEGER NOT NULL DEFAULT 0,
+	checked_at        TEXT    NOT NULL,
+	blame_commit_hash TEXT    NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_code_survival_project ON code_survival(project_path);
+CREATE INDEX IF NOT EXISTS idx_code_survival_file ON code_survival(file_path);
+CREATE INDEX IF NOT EXISTS idx_code_survival_attribution ON code_survival(attribution_id);
 `,
 }
