@@ -35,26 +35,26 @@
 
 ### Event Correlation
 
-- [ ] **CORR-01**: Match file system events to Claude Code session events using time-window correlation
-- [ ] **CORR-02**: Produce per-line attribution records with authorship level
-- [ ] **CORR-03**: Handle ambiguous cases (mark as "uncertain" rather than guess)
+- [x] **CORR-01**: Match file system events to Claude Code session events using time-window correlation
+- [x] **CORR-02**: Produce per-line attribution records with authorship level
+- [x] **CORR-03**: Handle ambiguous cases (mark as "uncertain" rather than guess)
 
 ### Authorship Classification
 
-- [ ] **AUTH-01**: Classify each code contribution on 5-level spectrum: fully AI, AI-first/human-revised, human-first/AI-revised, AI-suggested/human-written, fully human
-- [ ] **AUTH-02**: Use session timestamps + file events to determine who went first
-- [ ] **AUTH-03**: Aggregate line-level attribution to file and project levels
+- [x] **AUTH-01**: Classify each code contribution on 5-level spectrum: fully AI, AI-first/human-revised, human-first/AI-revised, AI-suggested/human-written, fully human
+- [x] **AUTH-02**: Use session timestamps + file events to determine who went first
+- [x] **AUTH-03**: Aggregate line-level attribution to file and project levels
 
 ### Work-Type Classification
 
-- [ ] **WTYP-01**: Classify code changes as: architecture, core logic, boilerplate, bug fix, edge case handling, test scaffolding
-- [ ] **WTYP-02**: Use heuristic rules (file paths, AST patterns, change patterns) not LLM
-- [ ] **WTYP-03**: Allow user override of misclassified work types
+- [x] **WTYP-01**: Classify code changes as: architecture, core logic, boilerplate, bug fix, edge case handling, test scaffolding
+- [x] **WTYP-02**: Use heuristic rules (file paths, AST patterns, change patterns) not LLM
+- [x] **WTYP-03**: Allow user override of misclassified work types
 
 ### Meaningful AI Metric
 
-- [ ] **METR-01**: Compute "meaningful AI %" weighting by work type (architecture + core logic weighted higher than boilerplate)
-- [ ] **METR-02**: Compute per-file and per-project meaningful AI percentages
+- [x] **METR-01**: Compute "meaningful AI %" weighting by work type (architecture + core logic weighted higher than boilerplate)
+- [x] **METR-02**: Compute per-file and per-project meaningful AI percentages
 
 ### Code Survival
 
@@ -129,17 +129,17 @@
 | GITI-02 | Phase 1 | Complete |
 | GITI-03 | Phase 1 | Complete |
 | GITI-04 | Phase 1 | Complete |
-| CORR-01 | Phase 2 | Pending |
-| CORR-02 | Phase 2 | Pending |
-| CORR-03 | Phase 2 | Pending |
-| AUTH-01 | Phase 2 | Pending |
-| AUTH-02 | Phase 2 | Pending |
-| AUTH-03 | Phase 2 | Pending |
-| WTYP-01 | Phase 2 | Pending |
-| WTYP-02 | Phase 2 | Pending |
-| WTYP-03 | Phase 2 | Pending |
-| METR-01 | Phase 2 | Pending |
-| METR-02 | Phase 2 | Pending |
+| CORR-01 | Phase 2 | Complete |
+| CORR-02 | Phase 2 | Complete |
+| CORR-03 | Phase 2 | Complete |
+| AUTH-01 | Phase 2 | Complete |
+| AUTH-02 | Phase 2 | Complete |
+| AUTH-03 | Phase 2 | Complete |
+| WTYP-01 | Phase 2 | Complete |
+| WTYP-02 | Phase 2 | Complete |
+| WTYP-03 | Phase 2 | Complete |
+| METR-01 | Phase 2 | Complete |
+| METR-02 | Phase 2 | Complete |
 | CLIO-01 | Phase 3 | Pending |
 | CLIO-02 | Phase 3 | Pending |
 | CLIO-03 | Phase 3 | Pending |

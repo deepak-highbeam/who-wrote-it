@@ -13,7 +13,7 @@ This roadmap delivers a Go-based daemon that monitors code authorship across hum
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Data Pipeline** - Daemon foundation with all three input signals flowing and persisted
-- [ ] **Phase 2: Intelligence** - Correlation engine, authorship spectrum, work-type classification, and meaningful AI metric
+- [x] **Phase 2: Intelligence** - Correlation engine, authorship spectrum, work-type classification, and meaningful AI metric
 - [ ] **Phase 3: Output** - CLI reports, GitHub PR integration, and code survival tracking
 
 ## Phase Details
@@ -49,8 +49,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 02-01-PLAN.md -- Event correlation engine and five-level authorship classification (Wave 1)
-- [ ] 02-02-PLAN.md -- Work-type classification and meaningful AI metric (Wave 2)
+- [x] 02-01-PLAN.md -- Event correlation engine and five-level authorship classification (Wave 1)
+- [x] 02-02-PLAN.md -- Work-type classification and meaningful AI metric (Wave 2)
 
 ### Phase 3: Output
 **Goal**: Users can see attribution and classification results through CLI reports, GitHub PR comments, and code survival analysis
@@ -75,5 +75,5 @@ Phases execute in numeric order: 1 --> 2 --> 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Data Pipeline | 4/4 | Complete ✓ | 2026-02-09 |
-| 2. Intelligence | 0/2 | Not started | - |
+| 2. Intelligence | 2/2 | Complete ✓ | 2026-02-09 |
 | 3. Output | 0/2 | Not started | - |
