@@ -64,8 +64,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 03-01: CLI commands and report generation
-- [ ] 03-02: GitHub PR integration and code survival tracking
+- [ ] 03-01-PLAN.md -- CLI commands (analyze, enhanced status) and report generation (Wave 1)
+- [ ] 03-02-PLAN.md -- GitHub PR integration and code survival tracking (Wave 2)
 
 ## Progress
 
