@@ -79,10 +79,10 @@ Plans:
   3. Work-type classifier runs on each attribution, assigning work-type labels using heuristic rules
   4. `who-wrote-it analyze` produces non-empty attribution reports with real data from the daemon pipeline
   5. All 5 E2E user flows work end-to-end (daemon monitoring, CLI analyze, PR comment, code survival, status)
-**Plans**: 0 plans
+**Plans**: 1 plan
 
 Plans:
-(none yet — run `/gsd:plan-phase 4`)
+- [ ] 04-01-PLAN.md -- Wire attribution pipeline: store method + background processor + integration tests (Wave 1)
 
 ## Progress
 
@@ -94,4 +94,4 @@ Phases execute in numeric order: 1 --> 2 --> 3 --> 4
 | 1. Data Pipeline | 4/4 | Complete ✓ | 2026-02-09 |
 | 2. Intelligence | 2/2 | Complete ✓ | 2026-02-09 |
 | 3. Output | 2/2 | Complete ✓ | 2026-02-09 |
-| 4. Wire Attribution Pipeline | 0/? | Not Started | -- |
+| 4. Wire Attribution Pipeline | 0/1 | Planned | -- |
