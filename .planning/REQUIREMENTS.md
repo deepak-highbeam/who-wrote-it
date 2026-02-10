@@ -58,20 +58,20 @@
 
 ### Code Survival
 
-- [ ] **SURV-01**: Track whether AI-written code persists across subsequent commits
-- [ ] **SURV-02**: Report code survival rate by authorship level and work type
+- [x] **SURV-01**: Track whether AI-written code persists across subsequent commits
+- [x] **SURV-02**: Report code survival rate by authorship level and work type
 
 ### CLI Output
 
-- [ ] **CLIO-01**: `who-wrote-it analyze` produces attribution report for current repo
-- [ ] **CLIO-02**: `who-wrote-it status` shows daemon status and data collection stats
-- [ ] **CLIO-03**: Per-file breakdown showing authorship spectrum and work-type distribution
+- [x] **CLIO-01**: `who-wrote-it analyze` produces attribution report for current repo
+- [x] **CLIO-02**: `who-wrote-it status` shows daemon status and data collection stats
+- [x] **CLIO-03**: Per-file breakdown showing authorship spectrum and work-type distribution
 
 ### GitHub PR Integration
 
-- [ ] **GHPR-01**: Auto-post collaboration summary comment on PR creation
-- [ ] **GHPR-02**: PR comment shows authorship breakdown by work type (not just line counts)
-- [ ] **GHPR-03**: PR comment shows which files had which collaboration pattern
+- [x] **GHPR-01**: Auto-post collaboration summary comment on PR creation
+- [x] **GHPR-02**: PR comment shows authorship breakdown by work type (not just line counts)
+- [x] **GHPR-03**: PR comment shows which files had which collaboration pattern
 
 ## v2 Requirements
 
@@ -140,14 +140,14 @@
 | WTYP-03 | Phase 2 | Complete |
 | METR-01 | Phase 2 | Complete |
 | METR-02 | Phase 2 | Complete |
-| CLIO-01 | Phase 3 | Pending |
-| CLIO-02 | Phase 3 | Pending |
-| CLIO-03 | Phase 3 | Pending |
-| GHPR-01 | Phase 3 | Pending |
-| GHPR-02 | Phase 3 | Pending |
-| GHPR-03 | Phase 3 | Pending |
-| SURV-01 | Phase 3 | Pending |
-| SURV-02 | Phase 3 | Pending |
+| CLIO-01 | Phase 3 | Complete |
+| CLIO-02 | Phase 3 | Complete |
+| CLIO-03 | Phase 3 | Complete |
+| GHPR-01 | Phase 3 | Complete |
+| GHPR-02 | Phase 3 | Complete |
+| GHPR-03 | Phase 3 | Complete |
+| SURV-01 | Phase 3 | Complete |
+| SURV-02 | Phase 3 | Complete |
 
 **Coverage:**
 - v1 requirements: 35 total
