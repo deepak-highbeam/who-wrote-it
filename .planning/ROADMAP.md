@@ -15,6 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Data Pipeline** - Daemon foundation with all three input signals flowing and persisted
 - [x] **Phase 2: Intelligence** - Correlation engine, authorship spectrum, work-type classification, and meaningful AI metric
 - [x] **Phase 3: Output** - CLI reports, GitHub PR integration, and code survival tracking
+- [ ] **Phase 4: Wire Attribution Pipeline** - Connect daemon event collection to correlation/authorship/worktype pipeline (Gap Closure)
 
 ## Phase Details
 
@@ -67,13 +68,30 @@ Plans:
 - [x] 03-01-PLAN.md -- CLI commands (analyze, enhanced status) and report generation (Wave 1)
 - [x] 03-02-PLAN.md -- GitHub PR integration and code survival tracking (Wave 2)
 
+### Phase 4: Wire Attribution Pipeline
+**Goal**: Connect the daemon's event collection to the existing correlation engine, authorship classifier, and work-type classifier so attributions are produced in live operation
+**Depends on**: Phase 1, Phase 2, Phase 3
+**Requirements**: CORR-01, CORR-02, AUTH-01, AUTH-02, WTYP-01, WTYP-02, METR-01, METR-02
+**Gap Closure**: Closes all gaps from v1 milestone audit
+**Success Criteria** (what must be TRUE):
+  1. Daemon invokes correlation engine on incoming file events, producing per-line attribution records stored in SQLite
+  2. Authorship classifier runs on each correlated result, assigning five-level spectrum labels using session timestamps
+  3. Work-type classifier runs on each attribution, assigning work-type labels using heuristic rules
+  4. `who-wrote-it analyze` produces non-empty attribution reports with real data from the daemon pipeline
+  5. All 5 E2E user flows work end-to-end (daemon monitoring, CLI analyze, PR comment, code survival, status)
+**Plans**: 0 plans
+
+Plans:
+(none yet — run `/gsd:plan-phase 4`)
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 --> 2 --> 3
+Phases execute in numeric order: 1 --> 2 --> 3 --> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Data Pipeline | 4/4 | Complete ✓ | 2026-02-09 |
 | 2. Intelligence | 2/2 | Complete ✓ | 2026-02-09 |
 | 3. Output | 2/2 | Complete ✓ | 2026-02-09 |
+| 4. Wire Attribution Pipeline | 0/? | Not Started | -- |
