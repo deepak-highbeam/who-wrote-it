@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -20,6 +22,11 @@ type ClaudeCodeParser struct {
 
 	// maxAge limits initial discovery to sessions modified within this duration.
 	maxAge time.Duration
+
+	// lastContent tracks the most recent full content written to each file path,
+	// enabling accurate line-diff computation for Write tool events.
+	mu          sync.Mutex
+	lastContent map[string]string
 }
 
 // NewClaudeCodeParser creates a parser that discovers sessions under sessionDir.
@@ -37,8 +44,9 @@ func NewClaudeCodeParser(sessionDir string, maxAge time.Duration) *ClaudeCodePar
 		maxAge = 24 * time.Hour
 	}
 	return &ClaudeCodeParser{
-		sessionDir: sessionDir,
-		maxAge:     maxAge,
+		sessionDir:  sessionDir,
+		maxAge:      maxAge,
+		lastContent: make(map[string]string),
 	}
 }
 
@@ -123,6 +131,10 @@ func (p *ClaudeCodeParser) ParseLine(line []byte) (*SessionEvent, error) {
 		return nil, nil
 	}
 
+	// Protect lastContent map from concurrent tailer goroutines.
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	var envelope jsonlEnvelope
 	if err := json.Unmarshal(line, &envelope); err != nil {
 		// Malformed JSON -- log and skip.
@@ -130,7 +142,7 @@ func (p *ClaudeCodeParser) ParseLine(line []byte) (*SessionEvent, error) {
 		return nil, nil
 	}
 
-	return extractToolUse(&envelope, string(line))
+	return p.extractToolUse(&envelope, string(line))
 }
 
 // --- internal types for JSON parsing ---
@@ -176,7 +188,7 @@ type bashInput struct {
 
 // --- extraction logic ---
 
-func extractToolUse(env *jsonlEnvelope, rawJSON string) (*SessionEvent, error) {
+func (p *ClaudeCodeParser) extractToolUse(env *jsonlEnvelope, rawJSON string) (*SessionEvent, error) {
 	// Try message.content first (standard assistant message format).
 	var blocks []contentBlock
 
@@ -217,8 +229,27 @@ func extractToolUse(env *jsonlEnvelope, rawJSON string) (*SessionEvent, error) {
 			}
 			event.FilePath = inp.FilePath
 			event.ContentHash = hashContent(inp.Content)
-			event.LinesChanged = countLines(inp.Content)
-			event.DiffContent = inp.Content
+
+			// Compute actual line diff against previous content.
+			// Sources of baseline (in priority order):
+			//   1. In-memory cache (seeded by prior Read/Write events)
+			//   2. Git committed version (reliable even after write executed)
+			//   3. Fall back to counting all lines (new file / not in git)
+			prev, hasCached := p.lastContent[inp.FilePath]
+			if !hasCached {
+				if gitContent, err := gitBaselineContent(inp.FilePath); err == nil && gitContent != inp.Content {
+					prev = gitContent
+					hasCached = true
+				}
+			}
+			if hasCached {
+				event.LinesChanged = diffLineCount(prev, inp.Content)
+				event.DiffContent = writeDiffContent(prev, inp.Content)
+			} else {
+				event.LinesChanged = countLines(inp.Content)
+				event.DiffContent = inp.Content
+			}
+			p.lastContent[inp.FilePath] = inp.Content
 
 		case "Edit":
 			var inp editInput
@@ -236,6 +267,15 @@ func extractToolUse(env *jsonlEnvelope, rawJSON string) (*SessionEvent, error) {
 			var inp readInput
 			if err := json.Unmarshal(block.Input, &inp); err == nil {
 				event.FilePath = inp.FilePath
+				// Seed content cache so a subsequent Write can compute
+				// an accurate diff. Use git (not disk) because the
+				// tailer may process this line after a subsequent Write
+				// has already modified the file on disk.
+				if _, ok := p.lastContent[inp.FilePath]; !ok {
+					if content, err := gitBaselineContent(inp.FilePath); err == nil {
+						p.lastContent[inp.FilePath] = content
+					}
+				}
 			}
 
 		case "Bash":
@@ -257,6 +297,31 @@ func extractToolUse(env *jsonlEnvelope, rawJSON string) (*SessionEvent, error) {
 	}
 
 	return nil, nil
+}
+
+// gitBaselineContent returns the committed (HEAD) version of a file from git.
+// Returns an error if the file is not in a git repo or not committed.
+func gitBaselineContent(filePath string) (string, error) {
+	// Resolve symlinks so paths are comparable (macOS /var → /private/var).
+	absPath, err := filepath.EvalSymlinks(filePath)
+	if err != nil {
+		absPath = filePath
+	}
+	dir := filepath.Dir(absPath)
+	rootOut, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return "", err
+	}
+	root := strings.TrimSpace(string(rootOut))
+	relPath, err := filepath.Rel(root, absPath)
+	if err != nil {
+		return "", err
+	}
+	out, err := exec.Command("git", "-C", root, "show", "HEAD:"+relPath).Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
 }
 
 // containsToolUse is a fast check to avoid parsing lines that definitely
@@ -355,6 +420,76 @@ func trimLine(line []byte) []byte {
 		end--
 	}
 	return line[start:end]
+}
+
+// diffLineCount computes the number of lines that actually differ between
+// old and new content. Lines present in both (even at different positions)
+// are not counted. This gives an accurate change count for Write tool events
+// that rewrite the entire file.
+func diffLineCount(old, new string) int {
+	if old == new {
+		return 0
+	}
+
+	oldLines := strings.Split(old, "\n")
+	newLines := strings.Split(new, "\n")
+
+	// Count lines that differ by position, bounded by the shorter slice.
+	changed := 0
+	minLen := len(oldLines)
+	if len(newLines) < minLen {
+		minLen = len(newLines)
+	}
+	for i := 0; i < minLen; i++ {
+		if oldLines[i] != newLines[i] {
+			changed++
+		}
+	}
+
+	// Lines added or removed beyond the shared range.
+	if len(newLines) > len(oldLines) {
+		changed += len(newLines) - len(oldLines)
+	} else {
+		changed += len(oldLines) - len(newLines)
+	}
+
+	// If strings differ but all lines match (e.g. trailing newline difference),
+	// report at least 1.
+	if changed == 0 {
+		changed = 1
+	}
+	return changed
+}
+
+// writeDiffContent returns only the lines from new that differ from old,
+// for use as DiffContent on Write events with a known previous version.
+func writeDiffContent(old, new string) string {
+	if old == new {
+		return ""
+	}
+
+	oldLines := strings.Split(old, "\n")
+	newLines := strings.Split(new, "\n")
+
+	var result []string
+	minLen := len(oldLines)
+	if len(newLines) < minLen {
+		minLen = len(newLines)
+	}
+	for i := 0; i < minLen; i++ {
+		if oldLines[i] != newLines[i] {
+			result = append(result, newLines[i])
+		}
+	}
+	// Appended lines.
+	for i := minLen; i < len(newLines); i++ {
+		result = append(result, newLines[i])
+	}
+
+	if len(result) == 0 {
+		return ""
+	}
+	return strings.Join(result, "\n")
 }
 
 // editOnlyNewLines returns only the lines in newStr that are genuinely new

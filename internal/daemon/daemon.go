@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -257,6 +258,9 @@ func (d *Daemon) shutdown() error {
 
 	// Remove socket file.
 	_ = os.Remove(d.cfg.SocketPath)
+
+	// Remove PID file.
+	_ = os.Remove(filepath.Join(d.cfg.DataDir, "whowroteit.pid"))
 
 	d.mu.Lock()
 	d.running = false

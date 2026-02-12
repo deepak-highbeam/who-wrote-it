@@ -2,7 +2,9 @@ package sessionparser
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -504,5 +506,294 @@ func TestCountLines(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("countLines(%q) = %d, want %d", tt.input, got, tt.want)
 		}
+	}
+}
+
+func TestDiffLineCount(t *testing.T) {
+	tests := []struct {
+		name string
+		old  string
+		new  string
+		want int
+	}{
+		{"identical", "a\nb\nc", "a\nb\nc", 0},
+		{"one line changed", "a\nb\nc", "a\nB\nc", 1},
+		{"all lines changed", "a\nb", "x\ny", 2},
+		{"line added", "a\nb", "a\nb\nc", 1},
+		{"line removed", "a\nb\nc", "a\nb", 1},
+		{"trailing newline diff", "a\nb\n", "a\nb", 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := diffLineCount(tt.old, tt.new)
+			if got != tt.want {
+				t.Errorf("diffLineCount = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWriteDiffContent(t *testing.T) {
+	tests := []struct {
+		name string
+		old  string
+		new  string
+		want string
+	}{
+		{"identical", "a\nb\nc", "a\nb\nc", ""},
+		{"one line changed", "a\nb\nc", "a\nB\nc", "B"},
+		{"line added", "a\nb", "a\nb\nc", "c"},
+		{"multiple changes", "a\nb\nc", "a\nX\nY", "X\nY"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := writeDiffContent(tt.old, tt.new)
+			if got != tt.want {
+				t.Errorf("writeDiffContent = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWriteDiffIntegration(t *testing.T) {
+	p := NewClaudeCodeParser("", 24*time.Hour)
+
+	// First write: 4 lines, no prior content → all lines counted.
+	line1 := []byte(`{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/tmp/diff.xml","content":"<root>\n  <a>1</a>\n  <b>2</b>\n</root>"}}]}}`)
+	ev1, err := p.ParseLine(line1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ev1.LinesChanged != 4 {
+		t.Errorf("first write LinesChanged = %d, want 4", ev1.LinesChanged)
+	}
+
+	// Second write: change one line → should count 1 changed line.
+	line2 := []byte(`{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/tmp/diff.xml","content":"<root>\n  <a>CHANGED</a>\n  <b>2</b>\n</root>"}}]}}`)
+	ev2, err := p.ParseLine(line2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ev2.LinesChanged != 1 {
+		t.Errorf("second write LinesChanged = %d, want 1", ev2.LinesChanged)
+	}
+
+	// Third write: undo (identical to first) → should count 1 changed line.
+	line3 := []byte(`{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/tmp/diff.xml","content":"<root>\n  <a>1</a>\n  <b>2</b>\n</root>"}}]}}`)
+	ev3, err := p.ParseLine(line3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ev3.LinesChanged != 1 {
+		t.Errorf("undo write LinesChanged = %d, want 1", ev3.LinesChanged)
+	}
+}
+
+func TestReadSeedsWriteDiff(t *testing.T) {
+	// Read event seeds the content cache from git, enabling the
+	// subsequent Write to compute an accurate diff.
+	tmpDir := t.TempDir()
+	original := "line1\nline2\nline3\nline4\nline5\nline6\nline7\n"
+	filePath := initGitRepo(t, tmpDir, "test.txt", original)
+
+	p := NewClaudeCodeParser("", 24*time.Hour)
+
+	// Step 1: Claude reads the file → seeds cache from git.
+	readLine := []byte(fmt.Sprintf(
+		`{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"%s"}}]}}`,
+		filePath))
+	_, err := p.ParseLine(readLine)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Step 2: Claude writes with one line changed.
+	modified := "line1\nline2\nCHANGED\nline4\nline5\nline6\nline7\n"
+	writeLine := []byte(fmt.Sprintf(
+		`{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"%s","content":"%s"}}]}}`,
+		filePath, strings.ReplaceAll(modified, "\n", `\n`)))
+
+	ev, err := p.ParseLine(writeLine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ev == nil {
+		t.Fatal("expected event, got nil")
+	}
+
+	// Should detect only 1 changed line, not 7 (total lines).
+	if ev.LinesChanged != 1 {
+		t.Errorf("Read-then-Write: LinesChanged = %d, want 1", ev.LinesChanged)
+	}
+}
+
+// initGitRepo creates a git repo in dir, adds and commits a file.
+// Returns the absolute path to the committed file.
+func initGitRepo(t *testing.T, dir, fileName, content string) string {
+	t.Helper()
+	cmds := [][]string{
+		{"git", "init"},
+		{"git", "config", "user.email", "test@test.com"},
+		{"git", "config", "user.name", "Test"},
+	}
+	for _, args := range cmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%v: %s\n%s", args, err, out)
+		}
+	}
+
+	filePath := filepath.Join(dir, fileName)
+	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, args := range [][]string{
+		{"git", "add", fileName},
+		{"git", "commit", "-m", "initial"},
+	} {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%v: %s\n%s", args, err, out)
+		}
+	}
+	return filePath
+}
+
+func TestWriteLinesChanged_RealisticTiming(t *testing.T) {
+	// REALISTIC scenario:
+	//
+	// In real Claude Code usage:
+	//   1. Claude API returns assistant message with Write tool_use
+	//   2. Claude Code logs the message to JSONL
+	//   3. Claude Code EXECUTES the Write tool (file on disk now has new content)
+	//   4. The session tailer reads the JSONL line and calls ParseLine
+	//
+	// By step 4, the file on disk already has the NEW content (same as
+	// inp.Content). The parser must use git to get the committed baseline.
+
+	tmpDir := t.TempDir()
+
+	// Original 33-line XML file committed in git.
+	original := strings.Join([]string{
+		`<?xml version="1.0" encoding="UTF-8"?>`,
+		`<Configuration status="WARN">`,
+		`  <Appenders>`,
+		`    <Console name="Console" target="SYSTEM_OUT">`,
+		`      <PatternLayout>`,
+		`        <Pattern>%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n</Pattern>`,
+		`      </PatternLayout>`,
+		`    </Console>`,
+		`    <RollingFile name="File" fileName="logs/app.log"`,
+		`                 filePattern="logs/app-%d{yyyy-MM-dd}-%i.log">`,
+		`      <PatternLayout>`,
+		`        <Pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n</Pattern>`,
+		`      </PatternLayout>`,
+		`      <Policies>`,
+		`        <TimeBasedTriggeringPolicy/>`,
+		`        <SizeBasedTriggeringPolicy size="10 MB"/>`,
+		`      </Policies>`,
+		`      <DefaultRolloverStrategy max="10"/>`,
+		`    </RollingFile>`,
+		`  </Appenders>`,
+		`  <Loggers>`,
+		`    <Logger name="com.example" level="DEBUG" additivity="false">`,
+		`      <AppenderRef ref="Console"/>`,
+		`      <AppenderRef ref="File"/>`,
+		`    </Logger>`,
+		`    <Logger name="org.hibernate" level="WARN" additivity="false">`,
+		`      <AppenderRef ref="Console"/>`,
+		`    </Logger>`,
+		`    <Root level="INFO">`,
+		`      <AppenderRef ref="Console"/>`,
+		`      <AppenderRef ref="File"/>`,
+		`    </Root>`,
+		`  </Loggers>`,
+		`</Configuration>`,
+	}, "\n") + "\n"
+
+	filePath := initGitRepo(t, tmpDir, "log4j2-test.xml", original)
+
+	// Modified version: only 1 line changed (DEBUG → TRACE on line 22).
+	modified := strings.Replace(original,
+		`<Logger name="com.example" level="DEBUG" additivity="false">`,
+		`<Logger name="com.example" level="TRACE" additivity="false">`, 1)
+
+	if original == modified {
+		t.Fatal("test setup: original and modified should differ")
+	}
+
+	// Simulate realistic timing: Write tool has ALREADY executed.
+	// File on disk has the NEW content.
+	if err := os.WriteFile(filePath, []byte(modified), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	p := NewClaudeCodeParser("", 24*time.Hour)
+
+	// Write event with NO preceding Read event.
+	writeLine := []byte(fmt.Sprintf(
+		`{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"%s","content":"%s"}}]}}`,
+		filePath, strings.ReplaceAll(strings.ReplaceAll(modified, `"`, `\"`), "\n", `\n`)))
+
+	ev, err := p.ParseLine(writeLine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ev == nil {
+		t.Fatal("expected event, got nil")
+	}
+
+	if ev.LinesChanged != 1 {
+		t.Errorf("LinesChanged = %d, want 1", ev.LinesChanged)
+	}
+}
+
+func TestWriteLinesChanged_ReadThenWrite_DiskAlreadyUpdated(t *testing.T) {
+	// The tailer is behind and processes both Read + Write after the
+	// Write tool has already executed. File on disk has the NEW content
+	// when we process the Read event. Git provides the correct baseline.
+
+	tmpDir := t.TempDir()
+
+	original := "line1\nline2\nline3\nline4\nline5\nline6\nline7\n"
+	modified := "line1\nline2\nCHANGED\nline4\nline5\nline6\nline7\n"
+
+	filePath := initGitRepo(t, tmpDir, "config.xml", original)
+
+	// Write has already executed — disk has modified content.
+	if err := os.WriteFile(filePath, []byte(modified), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	p := NewClaudeCodeParser("", 24*time.Hour)
+
+	// Process Read event — file on disk already has new content,
+	// but git still has the original.
+	readLine := []byte(fmt.Sprintf(
+		`{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"%s"}}]}}`,
+		filePath))
+	_, err := p.ParseLine(readLine)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Process Write event.
+	writeLine := []byte(fmt.Sprintf(
+		`{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"%s","content":"%s"}}]}}`,
+		filePath, strings.ReplaceAll(modified, "\n", `\n`)))
+
+	ev, err := p.ParseLine(writeLine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ev == nil {
+		t.Fatal("expected event, got nil")
+	}
+
+	if ev.LinesChanged != 1 {
+		t.Errorf("LinesChanged = %d, want 1", ev.LinesChanged)
 	}
 }

@@ -5,7 +5,11 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -50,11 +54,33 @@ func startCmd() *cobra.Command {
 				return fmt.Errorf("load config: %w", err)
 			}
 
-			// Check if daemon is already running.
-			client := ipc.NewClient(cfg.SocketPath)
-			if err := client.Ping(); err == nil {
-				fmt.Println("daemon is already running")
-				return nil
+			pidPath := filepath.Join(cfg.DataDir, "whowroteit.pid")
+
+			// The already-running checks only apply to the user-facing
+			// entry point (non-foreground). The foreground child skips
+			// these because the parent already validated and wrote the
+			// PID file for the child's own PID.
+			if !foreground {
+				// Check if daemon is already running via PID file.
+				if data, err := os.ReadFile(pidPath); err == nil {
+					if pid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil {
+						if process, err := os.FindProcess(pid); err == nil {
+							if err := process.Signal(syscall.Signal(0)); err == nil {
+								fmt.Printf("daemon is already running (pid %d)\n", pid)
+								return nil
+							}
+						}
+					}
+					// Stale PID file — remove it.
+					_ = os.Remove(pidPath)
+				}
+
+				// Also check via IPC ping (covers case where PID file is missing).
+				client := ipc.NewClient(cfg.SocketPath)
+				if err := client.Ping(); err == nil {
+					fmt.Println("daemon is already running")
+					return nil
+				}
 			}
 
 			// Remove stale socket file (from a prior crash).
@@ -64,15 +90,66 @@ func startCmd() *cobra.Command {
 			}
 
 			if !foreground {
-				// For now, only foreground mode is supported.
-				// Background daemonization will be added later.
-				fmt.Println("hint: use --foreground to run in the current terminal")
-				fmt.Println("background daemonization not yet implemented, running in foreground")
+				// Re-exec ourselves with --foreground to daemonize.
+				exe, err := os.Executable()
+				if err != nil {
+					return fmt.Errorf("resolve executable path: %w", err)
+				}
+
+				// Ensure data directory exists for log file.
+				_ = cfg.EnsureDataDir()
+
+				logPath := filepath.Join(cfg.DataDir, "daemon.log")
+				logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+				if err != nil {
+					return fmt.Errorf("open daemon log: %w", err)
+				}
+
+				child := exec.Command(exe, "start", "--foreground")
+				child.Stdin = nil
+				child.Stdout = logFile
+				child.Stderr = logFile
+				child.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+
+				if err := child.Start(); err != nil {
+					logFile.Close()
+					return fmt.Errorf("start background daemon: %w", err)
+				}
+
+				// Parent no longer needs the log file handle.
+				logFile.Close()
+
+				childPID := child.Process.Pid
+				if err := os.WriteFile(pidPath, []byte(strconv.Itoa(childPID)), 0644); err != nil {
+					return fmt.Errorf("write pid file: %w", err)
+				}
+
+				// Detach from the child so it won't become a zombie.
+				_ = child.Process.Release()
+
+				// Poll IPC ping to confirm child is healthy (up to 5s).
+				client := ipc.NewClient(cfg.SocketPath)
+				healthy := false
+				for i := 0; i < 25; i++ {
+					time.Sleep(200 * time.Millisecond)
+					if err := client.Ping(); err == nil {
+						healthy = true
+						break
+					}
+				}
+
+				if !healthy {
+					_ = os.Remove(pidPath)
+					return fmt.Errorf("daemon failed to start (check logs)")
+				}
+
+				printBanner()
+				fmt.Printf("  daemon started (pid %d)\n\n", childPID)
+				return nil
 			}
 
+			// Foreground mode: run daemon directly.
 			// Create IPC server first (with nil store -- daemon will set it).
-			// We pass nil for daemon too; we need to create daemon first,
-			// then set the daemon reference on the server.
 			ipcServer := ipc.NewServer(nil, nil, cfg.WatchPaths)
 
 			// Create daemon with the IPC server.
@@ -105,6 +182,9 @@ func stopCmd() *cobra.Command {
 			if err := client.RequestStop(); err != nil {
 				return fmt.Errorf("stop daemon: %w", err)
 			}
+
+			// Remove PID file in case daemon crashes before its own cleanup.
+			_ = os.Remove(filepath.Join(cfg.DataDir, "whowroteit.pid"))
 
 			fmt.Println("daemon stopping")
 			return nil
@@ -416,6 +496,24 @@ func discoverProjectPath(s *store.Store) (string, error) {
 	}
 
 	return path, rows.Err()
+}
+
+func printBanner() {
+	const purple = "\033[38;5;135m"
+	const dim = "\033[38;5;99m"
+	const bold = "\033[1m"
+	const reset = "\033[0m"
+
+	fmt.Print(purple + bold + `
+              _                                    _             _    ___
+  __      __ | |__    ___    __      __ _ __  ___ | |_  ___   (_) |_ |__ \
+  \ \ /\ / / | '_ \  / _ \   \ \ /\ / /| '__|/ _ \| __|/ _ \  | | __|   ) |
+   \ V  V /  | | | || (_) |   \ V  V / | |  | (_) | |_|  __/  | | |_   / /
+    \_/\_/   |_| |_| \___/     \_/\_/  |_|   \___/ \__|\___/  |_|\__| /_/
+                                                                      (_)
+` + reset + dim + `
+    Track human vs AI code authorship
+` + reset + "\n")
 }
 
 // detectRemoteURL runs `git remote get-url origin` to get the remote URL.

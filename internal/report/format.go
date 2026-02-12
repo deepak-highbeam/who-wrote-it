@@ -11,14 +11,10 @@ import (
 // ANSI escape codes for terminal formatting.
 const (
 	bold  = "\033[1m"
-	red   = "\033[31m"
-	green = "\033[32m"
-	yellow = "\033[33m"
 	reset = "\033[0m"
 )
 
 // FormatProjectReport formats a ProjectReport as a terminal-friendly string.
-// Uses ANSI color codes: >70% AI = red, 30-70% = yellow, <30% = green.
 func FormatProjectReport(r *ProjectReport) string {
 	var b strings.Builder
 
@@ -28,8 +24,8 @@ func FormatProjectReport(r *ProjectReport) string {
 
 	// Headline metric.
 	b.WriteString(fmt.Sprintf("Project: %s\n", r.ProjectPath))
-	b.WriteString(fmt.Sprintf("Meaningful AI: %s%s%.1f%%%s\n",
-		bold, colorForPct(r.MeaningfulAIPct), r.MeaningfulAIPct, reset))
+	b.WriteString(fmt.Sprintf("Meaningful AI: %s%.1f%%%s\n",
+		bold, r.MeaningfulAIPct, reset))
 	b.WriteString(fmt.Sprintf("Raw AI:        %.1f%%\n", r.RawAIPct))
 	b.WriteString(fmt.Sprintf("Total files:   %d\n", r.TotalFiles))
 	b.WriteString(fmt.Sprintf("Total lines:   %d (%d AI)\n\n", r.TotalLines, r.AILines))
@@ -72,10 +68,10 @@ func FormatProjectReport(r *ProjectReport) string {
 		if !ok {
 			continue
 		}
-		b.WriteString(fmt.Sprintf("%-18s %-8s %5d %8d %s%5.1f%%%s %6.1f\n",
+		b.WriteString(fmt.Sprintf("%-18s %-8s %5d %8d %5.1f%% %6.1f\n",
 			wt, summary.Tier, summary.Files,
 			summary.TotalLines,
-			colorForPct(summary.AIPct), summary.AIPct, reset,
+			summary.AIPct,
 			summary.Weight))
 	}
 	b.WriteString("\n")
@@ -96,9 +92,9 @@ func FormatProjectReport(r *ProjectReport) string {
 			if len(name) > 34 {
 				name = "..." + name[len(name)-31:]
 			}
-			b.WriteString(fmt.Sprintf("%-35s %-16s %s%5.1f%%%s %7d %8s\n",
+			b.WriteString(fmt.Sprintf("%-35s %-16s %5.1f%% %7d %8s\n",
 				name, f.WorkType,
-				colorForPct(f.MeaningfulAIPct), f.MeaningfulAIPct, reset,
+				f.MeaningfulAIPct,
 				f.TotalLines, f.AuthorshipLevel))
 		}
 		if len(r.Files) > 20 {
@@ -118,8 +114,8 @@ func FormatFileReport(r *FileReport) string {
 
 	b.WriteString(fmt.Sprintf("File:      %s\n", r.FilePath))
 	b.WriteString(fmt.Sprintf("Work Type: %s\n", r.WorkType))
-	b.WriteString(fmt.Sprintf("AI %%:      %s%s%.1f%%%s\n",
-		bold, colorForPct(r.MeaningfulAIPct), r.MeaningfulAIPct, reset))
+	b.WriteString(fmt.Sprintf("AI %%:      %s%.1f%%%s\n",
+		bold, r.MeaningfulAIPct, reset))
 	b.WriteString(fmt.Sprintf("Raw AI %%:  %.1f%%\n", r.RawAIPct))
 	b.WriteString(fmt.Sprintf("Lines:     %d total, %d AI\n", r.TotalLines, r.AILines))
 	b.WriteString(fmt.Sprintf("Level:     %s\n", r.AuthorshipLevel))
@@ -177,19 +173,6 @@ func FormatJSON(v interface{}) string {
 		return fmt.Sprintf(`{"error": %q}`, err.Error())
 	}
 	return string(data)
-}
-
-// colorForPct returns an ANSI color code based on the AI percentage.
-// >70% = red, 30-70% = yellow, <30% = green.
-func colorForPct(pct float64) string {
-	switch {
-	case pct > 70:
-		return red
-	case pct >= 30:
-		return yellow
-	default:
-		return green
-	}
 }
 
 // humanBytes formats bytes as a human-readable string (KB, MB, GB).
