@@ -124,6 +124,11 @@ func GenerateProjectFromStore(s *store.Store) (*ProjectReport, error) {
 		// Compute line-level attribution against the changes.
 		la := metrics.ComputeLineAttribution(changedContent, claudeContents, baseContent)
 
+		// Skip files with no changed lines (e.g. fully reverted).
+		if la.TotalLines == 0 {
+			continue
+		}
+
 		// Determine work type from attributions or content.
 		wt := fileAttrList[0].WorkType
 		if wt == "" {
@@ -337,9 +342,11 @@ func getChangedLinesWithBase(s *store.Store, projectPath, filePath string) (chan
 	}
 
 	// Get git diff additions between the base commit and current working tree.
+	// If additions is empty, the file is unchanged from the base commit
+	// (e.g. all changes were reverted), so there are zero changed lines.
 	additions := gitDiffAdditions(projectPath, filePath, baseCommit)
 	if additions == "" {
-		return readFileContent(absPath), ""
+		return "", ""
 	}
 
 	// Get the base file content at the base commit.

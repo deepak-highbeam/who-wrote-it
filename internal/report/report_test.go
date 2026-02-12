@@ -175,15 +175,13 @@ func TestGenerateProjectFromStore_NewFiles(t *testing.T) {
 	defer cleanup()
 
 	// main.go: Claude wrote the whole file (all lines are new additions).
+	// Not committed — simulates a new file Claude just created in the working tree.
 	mainContent := "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"hello\")\n}\n"
 	writeFile(t, projDir, "main.go", mainContent)
-	// Commit so we have git history; attribution timestamp is AFTER this commit.
-	gitAdd(t, projDir, []string{"main.go"}, "add main.go")
 
 	// go.mod: human-written file (no Claude content).
 	gomodContent := "module example.com/proj\n\ngo 1.21\n"
 	writeFile(t, projDir, "go.mod", gomodContent)
-	gitAdd(t, projDir, []string{"go.mod"}, "add go.mod")
 
 	// Insert session event for main.go with Claude's content.
 	insertSessionEvent(t, s, "s1", filepath.Join(projDir, "main.go"),
@@ -276,18 +274,54 @@ func TestGenerateProjectFromStore_DiffBasedAttribution(t *testing.T) {
 	}
 }
 
+func TestGenerateProjectFromStore_RevertedFileShowsNoChanges(t *testing.T) {
+	s, projDir, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	// Step 1: Create a file and commit it BEFORE tracking starts.
+	originalContent := "package handler\n\nfunc Handle() {\n\treturn nil\n}\n"
+	writeFile(t, projDir, "handler.go", originalContent)
+	gitAdd(t, projDir, []string{"handler.go"}, "add handler.go")
+
+	// Step 2: Simulate Claude editing the file (session event recorded).
+	editedContent := "package handler\n\nfunc Handle() {\n\treturn ok\n}\n"
+	insertSessionEvent(t, s, "s1", filepath.Join(projDir, "handler.go"),
+		makeWriteRawJSON(filepath.Join(projDir, "handler.go"), editedContent), baseTime)
+
+	// Step 3: User undoes all changes — file is back to original content.
+	// The working tree now matches the base commit exactly.
+	writeFile(t, projDir, "handler.go", originalContent)
+
+	// Insert attribution (timestamp after the commit so base commit is found).
+	insertAttribution(t, s, "handler.go", projDir, "mostly_ai", "core_logic", baseTime, 1)
+
+	report, err := GenerateProjectFromStore(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The file was reverted — no changed lines, so it should be excluded from the report.
+	if len(report.Files) != 0 {
+		t.Errorf("Files = %d, want 0 (reverted file should be excluded)", len(report.Files))
+	}
+	if report.TotalFiles != 0 {
+		t.Errorf("TotalFiles = %d, want 0", report.TotalFiles)
+	}
+	if report.TotalLines != 0 {
+		t.Errorf("TotalLines = %d, want 0", report.TotalLines)
+	}
+}
+
 func TestGenerateProjectFromStore_FilesSortedByAIPct(t *testing.T) {
 	s, projDir, cleanup := setupTestStore(t)
 	defer cleanup()
 
-	// a.go: fully human (3 lines, 0 AI).
+	// a.go: fully human (3 lines, 0 AI). Not committed — new file in working tree.
 	writeFile(t, projDir, "a.go", "package a\n\nvar x = 1\n")
-	gitAdd(t, projDir, []string{"a.go"}, "add a.go")
 
-	// b.go: fully AI (3 lines, 3 AI).
+	// b.go: fully AI (3 lines, 3 AI). Not committed — new file in working tree.
 	bContent := "package b\n\nvar y = 2\n"
 	writeFile(t, projDir, "b.go", bContent)
-	gitAdd(t, projDir, []string{"b.go"}, "add b.go")
 
 	insertSessionEvent(t, s, "s1", filepath.Join(projDir, "b.go"),
 		makeWriteRawJSON(filepath.Join(projDir, "b.go"), bContent), baseTime)
@@ -332,10 +366,10 @@ func TestGenerateFileFromStore_SingleFile(t *testing.T) {
 	defer cleanup()
 
 	// handler.go: 5 lines total, Claude wrote 3 of them.
+	// Not committed — simulates a new file Claude just created in the working tree.
 	handlerContent := "package handler\n\nfunc Handle() {\n\treturn\n}\n"
 	claudeContent := "func Handle() {\n\treturn\n}\n"
 	writeFile(t, projDir, "handler.go", handlerContent)
-	gitAdd(t, projDir, []string{"handler.go"}, "add handler.go")
 
 	insertSessionEvent(t, s, "s1", filepath.Join(projDir, "handler.go"),
 		makeWriteRawJSON(filepath.Join(projDir, "handler.go"), claudeContent), baseTime)
