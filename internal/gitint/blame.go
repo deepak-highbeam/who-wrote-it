@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/go-git/go-git/v5"
@@ -63,10 +62,8 @@ func BlameAndStore(repo *git.Repository, s *store.Store, filePath string) error 
 // This is the recommended usage: blame only what changed, not the whole repo.
 func BlameChangedFiles(repo *git.Repository, s *store.Store, changedFiles []string) {
 	for _, fp := range changedFiles {
-		if err := BlameAndStore(repo, s, fp); err != nil {
-			// File might be deleted or binary -- non-fatal.
-			log.Printf("gitint: blame %s: %v", fp, err)
-		}
+		// File might be deleted or binary -- non-fatal.
+		_ = BlameAndStore(repo, s, fp)
 	}
 }
 

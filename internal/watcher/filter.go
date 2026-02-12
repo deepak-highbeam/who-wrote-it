@@ -15,6 +15,8 @@ var defaultIgnorePatterns = []string{
 	"*.swp",
 	"*.swo",
 	"*~",
+	"*.tmp",
+	"*.tmp.*",
 	".DS_Store",
 	"build",
 	"dist",

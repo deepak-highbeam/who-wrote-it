@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"time"
 )
@@ -65,7 +64,7 @@ func (t *Tailer) Tail(ctx context.Context, lines chan<- []byte) (finalOffset int
 		return t.offset, fmt.Errorf("stat %s: %w", t.path, err)
 	}
 	if info.Size() < t.offset {
-		log.Printf("sessionparser: file %s was truncated (size %d < offset %d), resetting", t.path, info.Size(), t.offset)
+		// file truncated, reset offset
 		t.offset = 0
 	}
 
@@ -128,7 +127,6 @@ func (t *Tailer) Tail(ctx context.Context, lines chan<- []byte) (finalOffset int
 				continue
 			}
 			if info.Size() < t.offset {
-				log.Printf("sessionparser: file %s truncated during tail, resetting", t.path)
 				t.offset = 0
 				f.Close()
 				f, err = os.Open(t.path)

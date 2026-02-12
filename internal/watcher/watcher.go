@@ -57,7 +57,7 @@ func (w *Watcher) Start(ctx context.Context) error {
 		}
 	}
 
-	log.Printf("watcher: watching %d paths", len(w.cfg.WatchPaths))
+	// watching paths silently
 
 	// Event loop.
 	for {
@@ -129,9 +129,7 @@ func (w *Watcher) addRecursive(root string) error {
 		if w.filter.ShouldIgnore(path) {
 			return filepath.SkipDir
 		}
-		if err := w.fsw.Add(path); err != nil {
-			log.Printf("watcher: add %s: %v", path, err)
-		}
+		_ = w.fsw.Add(path)
 		return nil
 	})
 }

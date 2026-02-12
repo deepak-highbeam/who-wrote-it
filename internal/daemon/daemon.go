@@ -120,7 +120,7 @@ func (d *Daemon) Start() error {
 	if err != nil {
 		log.Printf("session discover error: %v", err)
 	}
-	log.Printf("discovered %d session files", len(sessionFiles))
+	// discovered session files silently
 
 	sessionCtx, sessionCancel := context.WithCancel(d.ctx)
 	d.sessionCancel = sessionCancel
@@ -339,7 +339,7 @@ func (d *Daemon) startSessionTailer(ctx context.Context, sf sessionparser.Sessio
 		}
 	}()
 
-	log.Printf("tailing session: %s", sf.Path)
+	// tailing session silently
 }
 
 // startAttributionProcessor runs a background goroutine that periodically
@@ -377,8 +377,15 @@ func (d *Daemon) startAttributionProcessor(ctx context.Context) {
 						continue
 					}
 
-					// Step 2: Classify authorship level.
-					attr := classifier.Classify(*result)
+					// Step 2: Classify authorship level (with history for mixed attributions).
+					var prior *authorship.Attribution
+					if priorRecord, err := d.store.QueryLatestAttributionByFile(fe.FilePath); err == nil && priorRecord != nil {
+						prior = &authorship.Attribution{
+							FirstAuthor: priorRecord.FirstAuthor,
+							Level:       authorship.AuthorshipLevel(priorRecord.AuthorshipLevel),
+						}
+					}
+					attr := classifier.ClassifyWithHistory(*result, prior)
 
 					// Step 3: Classify work type (empty diff/commit -- path heuristics still work).
 					wt := wtClassifier.ClassifyFile(attr.FilePath, "", "")
@@ -411,7 +418,7 @@ func (d *Daemon) startAttributionProcessor(ctx context.Context) {
 					}
 				}
 
-				log.Printf("attribution: processed %d events", len(events))
+				// processed silently
 			}
 		}
 	}()

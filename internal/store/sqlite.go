@@ -292,13 +292,13 @@ func (s *Store) QueryFileEventsByProject(projectPath string, since time.Time) ([
 }
 
 // QuerySessionEventsInWindow returns session events for a given file path
-// within a time window [start, end], filtered to Write tool_name only,
+// within a time window [start, end], filtered to Write/Edit tool_name,
 // ordered by timestamp ascending.
 func (s *Store) QuerySessionEventsInWindow(filePath string, start, end time.Time) ([]StoredSessionEvent, error) {
 	rows, err := s.db.Query(
 		`SELECT id, session_id, event_type, tool_name, file_path, content_hash, timestamp
 		 FROM session_events
-		 WHERE file_path = ? AND tool_name = 'Write' AND timestamp >= ? AND timestamp <= ?
+		 WHERE file_path = ? AND tool_name IN ('Write', 'Edit') AND timestamp >= ? AND timestamp <= ?
 		 ORDER BY timestamp ASC`,
 		filePath,
 		start.UTC().Format(time.RFC3339Nano),
@@ -312,7 +312,7 @@ func (s *Store) QuerySessionEventsInWindow(filePath string, start, end time.Time
 	return scanSessionEvents(rows)
 }
 
-// QuerySessionEventsNearTimestamp returns Write session events within windowMs
+// QuerySessionEventsNearTimestamp returns Write/Edit session events within windowMs
 // milliseconds of the given timestamp, regardless of file path. Results are
 // ordered by absolute time distance ascending (closest first).
 func (s *Store) QuerySessionEventsNearTimestamp(timestamp time.Time, windowMs int) ([]StoredSessionEvent, error) {
@@ -324,7 +324,31 @@ func (s *Store) QuerySessionEventsNearTimestamp(timestamp time.Time, windowMs in
 	rows, err := s.db.Query(
 		`SELECT id, session_id, event_type, tool_name, file_path, content_hash, timestamp
 		 FROM session_events
-		 WHERE tool_name = 'Write' AND timestamp >= ? AND timestamp <= ?
+		 WHERE tool_name IN ('Write', 'Edit') AND timestamp >= ? AND timestamp <= ?
+		 ORDER BY timestamp ASC`,
+		start.UTC().Format(time.RFC3339Nano),
+		end.UTC().Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return scanSessionEvents(rows)
+}
+
+// QueryAnySessionEventsNearTimestamp returns ALL session events (any tool_name)
+// within windowMs milliseconds of the given timestamp. This is used to detect
+// general AI session activity for the ai_suggested_human_written classification.
+func (s *Store) QueryAnySessionEventsNearTimestamp(timestamp time.Time, windowMs int) ([]StoredSessionEvent, error) {
+	windowDur := time.Duration(windowMs) * time.Millisecond
+	start := timestamp.Add(-windowDur)
+	end := timestamp.Add(windowDur)
+
+	rows, err := s.db.Query(
+		`SELECT id, session_id, event_type, tool_name, file_path, content_hash, timestamp
+		 FROM session_events
+		 WHERE timestamp >= ? AND timestamp <= ?
 		 ORDER BY timestamp ASC`,
 		start.UTC().Format(time.RFC3339Nano),
 		end.UTC().Format(time.RFC3339Nano),
@@ -383,6 +407,34 @@ func (s *Store) QueryAttributionsByFile(filePath string) ([]AttributionRecord, e
 	defer rows.Close()
 
 	return scanAttributions(rows)
+}
+
+// QueryLatestAttributionByFile returns the most recent attribution for a file,
+// or nil if no attribution exists.
+func (s *Store) QueryLatestAttributionByFile(filePath string) (*AttributionRecord, error) {
+	rows, err := s.db.Query(
+		`SELECT id, file_path, project_path, file_event_id, session_event_id,
+		        authorship_level, confidence, uncertain, first_author,
+		        correlation_window_ms, timestamp
+		 FROM attributions
+		 WHERE file_path = ?
+		 ORDER BY timestamp DESC
+		 LIMIT 1`,
+		filePath,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	records, err := scanAttributions(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(records) == 0 {
+		return nil, nil
+	}
+	return &records[0], nil
 }
 
 // QueryAttributionsByProject returns all attributions for a project, ordered

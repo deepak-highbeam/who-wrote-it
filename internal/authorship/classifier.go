@@ -111,6 +111,12 @@ func (c *Classifier) Classify(result CorrelationResult) Attribution {
 		attr.Level = AISuggestedHumanWritten
 		attr.Confidence = 0.5
 		attr.FirstAuthor = "human"
+
+	case result.MatchType == "session_activity":
+		attr.Level = AISuggestedHumanWritten
+		attr.Confidence = 0.4
+		attr.FirstAuthor = "human"
+		attr.Uncertain = true
 	}
 
 	if attr.Confidence < 0.5 {

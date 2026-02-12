@@ -99,7 +99,7 @@ func (r *Repository) SyncCommits(ctx context.Context, since time.Time) error {
 		if err := r.store.SetDaemonState("git_last_synced_commit", head.Hash().String()); err != nil {
 			return fmt.Errorf("set last synced commit: %w", err)
 		}
-		log.Printf("gitint: synced %d new commits", synced)
+		// synced commits silently
 	}
 
 	return nil

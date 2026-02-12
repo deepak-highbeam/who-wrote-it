@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"sync"
@@ -72,7 +71,7 @@ func (s *Server) Listen(socketPath string, ctx context.Context) error {
 	s.stopped = false
 	s.mu.Unlock()
 
-	log.Printf("IPC server listening on %s", socketPath)
+	// IPC server listening
 
 	// Close the listener when context is cancelled.
 	go func() {

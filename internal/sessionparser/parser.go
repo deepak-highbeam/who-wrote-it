@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -127,7 +126,7 @@ func (p *ClaudeCodeParser) ParseLine(line []byte) (*SessionEvent, error) {
 	var envelope jsonlEnvelope
 	if err := json.Unmarshal(line, &envelope); err != nil {
 		// Malformed JSON -- log and skip.
-		log.Printf("sessionparser: skipping malformed JSONL line: %v", err)
+		// skip malformed line silently
 		return nil, nil
 	}
 
@@ -159,6 +158,10 @@ type contentBlock struct {
 type writeInput struct {
 	FilePath string `json:"file_path"`
 	Content  string `json:"content"`
+}
+
+type editInput struct {
+	FilePath string `json:"file_path"`
 }
 
 type readInput struct {
@@ -207,11 +210,19 @@ func extractToolUse(env *jsonlEnvelope, rawJSON string) (*SessionEvent, error) {
 		case "Write":
 			var inp writeInput
 			if err := json.Unmarshal(block.Input, &inp); err != nil {
-				log.Printf("sessionparser: skipping Write with bad input: %v", err)
+				// skip Write with bad input
 				return nil, nil
 			}
 			event.FilePath = inp.FilePath
 			event.ContentHash = hashContent(inp.Content)
+
+		case "Edit":
+			var inp editInput
+			if err := json.Unmarshal(block.Input, &inp); err != nil {
+				// skip Edit with bad input
+				return nil, nil
+			}
+			event.FilePath = inp.FilePath
 
 		case "Read":
 			var inp readInput

@@ -12,9 +12,10 @@ import (
 // ---------------------------------------------------------------------------
 
 type mockStoreReader struct {
-	fileEvents    []store.FileEvent
-	sessionEvents []store.StoredSessionEvent
-	nearEvents    []store.StoredSessionEvent
+	fileEvents       []store.FileEvent
+	sessionEvents    []store.StoredSessionEvent
+	nearEvents       []store.StoredSessionEvent
+	anyActivityEvents []store.StoredSessionEvent
 }
 
 func (m *mockStoreReader) QueryFileEventsInWindow(filePath string, start, end time.Time) ([]store.FileEvent, error) {
@@ -58,6 +59,20 @@ func (m *mockStoreReader) QuerySessionEventsNearTimestamp(timestamp time.Time, w
 
 	var out []store.StoredSessionEvent
 	for _, se := range m.nearEvents {
+		if !se.Timestamp.Before(start) && !se.Timestamp.After(end) {
+			out = append(out, se)
+		}
+	}
+	return out, nil
+}
+
+func (m *mockStoreReader) QueryAnySessionEventsNearTimestamp(timestamp time.Time, windowMs int) ([]store.StoredSessionEvent, error) {
+	windowDur := time.Duration(windowMs) * time.Millisecond
+	start := timestamp.Add(-windowDur)
+	end := timestamp.Add(windowDur)
+
+	var out []store.StoredSessionEvent
+	for _, se := range m.anyActivityEvents {
 		if !se.Timestamp.Before(start) && !se.Timestamp.After(end) {
 			out = append(out, se)
 		}

@@ -2,7 +2,6 @@ package sessionparser
 
 import (
 	"context"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,11 +28,7 @@ func watchForNewSessions(ctx context.Context, baseDir string, found chan<- Sessi
 	defer watcher.Close()
 
 	// Add the base directory and all existing subdirectories.
-	if err := addDirRecursive(watcher, baseDir); err != nil {
-		log.Printf("sessionparser: initial watch setup: %v", err)
-	}
-
-	log.Printf("sessionparser: watching for new sessions in %s", baseDir)
+	_ = addDirRecursive(watcher, baseDir)
 
 	for {
 		select {
@@ -48,9 +43,7 @@ func watchForNewSessions(ctx context.Context, baseDir string, found chan<- Sessi
 			// New directory created -- watch it recursively.
 			if event.Has(fsnotify.Create) {
 				if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
-					if err := addDirRecursive(watcher, event.Name); err != nil {
-						log.Printf("sessionparser: watch new dir %s: %v", event.Name, err)
-					}
+					_ = addDirRecursive(watcher, event.Name)
 				}
 			}
 
@@ -70,11 +63,10 @@ func watchForNewSessions(ctx context.Context, baseDir string, found chan<- Sessi
 				}
 			}
 
-		case err, ok := <-watcher.Errors:
+		case _, ok := <-watcher.Errors:
 			if !ok {
 				return nil
 			}
-			log.Printf("sessionparser: fsnotify error: %v", err)
 		}
 	}
 }
@@ -86,9 +78,7 @@ func addDirRecursive(w *fsnotify.Watcher, dir string) error {
 			return nil
 		}
 		if d.IsDir() {
-			if watchErr := w.Add(path); watchErr != nil {
-				log.Printf("sessionparser: watch add %s: %v", path, watchErr)
-			}
+			_ = w.Add(path)
 		}
 		return nil
 	})

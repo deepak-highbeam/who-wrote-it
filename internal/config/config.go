@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Config holds all daemon configuration.
@@ -61,6 +62,14 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 
+	// Expand ~ in all path fields.
+	cfg.DataDir = expandTilde(cfg.DataDir)
+	cfg.SocketPath = expandTilde(cfg.SocketPath)
+	cfg.DBPath = expandTilde(cfg.DBPath)
+	for i, p := range cfg.WatchPaths {
+		cfg.WatchPaths[i] = expandTilde(p)
+	}
+
 	// Re-derive paths if DataDir was overridden but socket/db paths were not.
 	if cfg.SocketPath == "" {
 		cfg.SocketPath = filepath.Join(cfg.DataDir, "whowroteit.sock")
@@ -70,6 +79,18 @@ func Load(path string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// expandTilde replaces a leading ~ with the user's home directory.
+func expandTilde(path string) string {
+	if !strings.HasPrefix(path, "~") {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	return filepath.Join(home, path[1:])
 }
 
 // EnsureDataDir creates the data directory if it does not exist.
