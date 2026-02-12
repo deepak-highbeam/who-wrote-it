@@ -18,31 +18,54 @@ who-wrote-it answers questions like:
 The daemon runs in the background while you code, combining three data sources:
 
 1. **File system events** — watches your project directories for changes via fsnotify
-2. **AI session data** — tails Claude Code JSONL session files for Write/Read/Bash events
+2. **AI session data** — tails Claude Code JSONL session files for Write/Edit events
 3. **Git history** — syncs commits, blame data, and Co-Authored-By tags every 5 minutes
 
-A correlation engine matches file changes to AI session activity within a 5-second window, then classifies each event by authorship level and work type. Results are stored in a local SQLite database.
+A correlation engine matches file changes to AI session activity, then classifies each event by authorship level and work type. Results are stored in a local SQLite database.
+
+At report time, attribution is computed by comparing **git diff additions** (only the lines that changed) against Claude's session event content using line-level hash matching. This ensures accurate attribution even for edits to existing files.
 
 ```
 file events ─┐
               ├─→ correlation engine ─→ authorship classifier ─→ work-type classifier ─→ SQLite
 session data ─┘                                                        ↑
 git history ───────────────────────────────────────────────────────────┘
+
+At report time:
+git diff (changed lines) + session event content ─→ line-level hash comparison ─→ AI% per file
 ```
 
 ## Authorship Classification
 
-Every file event is classified into one of five authorship levels:
+Every tracked file is classified into one of three authorship levels based on the proportion of changed lines attributable to AI:
 
 | Level | Meaning |
 |-------|---------|
-| **fully_ai** | AI wrote the code (Write event within 2s) |
-| **ai_first_human_revised** | AI wrote it, human edited after (Write event within 2-5s) |
-| **human_first_ai_revised** | Human wrote it, AI revised later |
-| **ai_suggested_human_written** | AI was active nearby but didn't write this file |
-| **fully_human** | No AI session activity detected |
+| **mostly_ai** | >70% of changed lines match Claude's session output |
+| **mixed** | 30-70% of changed lines match Claude's session output |
+| **mostly_human** | <30% of changed lines match Claude's session output |
 
-Classification uses time-window correlation with graduated confidence (0.95 for exact match down to 0.5 for time proximity). Git Co-Authored-By tags serve as a fallback signal.
+### How Line Attribution Works
+
+1. For each tracked file, find the git state **before tracking began** (earliest attribution timestamp)
+2. Compute `git diff` between that base and the current working tree — these are the **changed lines**
+3. For Edit events, diff `old_string` vs `new_string` to extract only **genuinely new lines** — context lines that existed before the edit are stripped
+4. Compare each changed line (by SHA-256 hash of trimmed content) against Claude's extracted content
+5. **Subtract pre-existing patterns**: lines that already existed in the base file (before tracking) are removed from Claude's hash map, so common boilerplate like annotations or closing brackets aren't falsely attributed to AI
+6. Empty/whitespace-only lines are excluded — they carry no authorship signal
+7. AI% = AI lines / total non-empty changed lines
+
+This means:
+- **New files** created by Claude: all lines are additions in the diff, compared against session content
+- **Existing files** edited by Claude: only the changed lines count, not the whole file. If Claude edited 1 line in a 500-line file, the denominator is 1, not 500
+- **Duplicate lines** (like `}` or `return nil`): frequency-counted — if Claude wrote 3 closing braces and the diff has 5, only 3 are attributed to AI
+- **Pre-existing patterns**: if `@Override` appeared 10 times in the file before Claude was involved, those patterns won't count as AI even if Claude's edits also contain them
+
+Correlation uses two match tiers:
+- **exact_file** — Claude's session event targets the same file path
+- **fuzzy_file** — Same filename with different path prefix (e.g., `foo.go` vs `/abs/path/to/foo.go`)
+
+Git Co-Authored-By tags serve as a supplementary signal.
 
 ## Work Type Classification
 
@@ -125,15 +148,16 @@ Project: /Users/dev/myproject
 Meaningful AI: 45.3%
 Raw AI:        52.1%
 Total files:   15
+Total lines changed: 342
+AI lines:      178
 
 Authorship Spectrum
 --------------------------------------------------
 Level                            Count     Pct
 --------------------------------------------------
-fully_ai                            12    42.9%
-ai_first_human_revised               8    28.6%
-human_first_ai_revised               3    10.7%
-fully_human                          5    17.9%
+mostly_ai                           8    53.3%
+mixed                               3    20.0%
+mostly_human                        4    26.7%
 
 Work Type Distribution
 ------------------------------------------------------------
@@ -184,27 +208,25 @@ Breaks down survival rates by authorship level and work type — answering wheth
 Raw AI percentage treats all code equally. Meaningful AI % weights by work type:
 
 ```
-Meaningful AI % = Σ(AI_events × weight) / Σ(total_events × weight) × 100
+Meaningful AI % = Σ(AI_lines × weight) / Σ(total_changed_lines × weight) × 100
 ```
 
 A project where AI writes 90% of the boilerplate (1.0x) but only 20% of the core logic (3.0x) will have a lower Meaningful AI % than raw numbers suggest — which is a more accurate picture of AI's actual contribution.
-
-Only `fully_ai` and `ai_first_human_revised` count as AI-authored. `human_first_ai_revised` does not — the human initiated that work.
 
 ## Architecture
 
 ```
 cmd/whowroteit/          CLI entry point (cobra)
 internal/
-  authorship/            5-level authorship classifier
+  authorship/            3-level authorship classifier (mostly_ai / mixed / mostly_human)
   config/                JSON config loading with defaults
-  correlation/           Time-window event correlation engine
+  correlation/           File-path event correlation engine (exact + fuzzy match)
   daemon/                Daemon lifecycle, goroutine orchestration
   github/                PR comment generation, GitHub API
   gitint/                Git blame, commit sync, Co-Authored-By parsing
   ipc/                   Unix domain socket server/client
-  metrics/               Meaningful AI % computation
-  report/                CLI report formatting (text + JSON)
+  metrics/               Line-level attribution (SHA-256 hash comparison)
+  report/                CLI report formatting (text + JSON), git-diff-based attribution
   sessionparser/         Claude Code JSONL parser, SessionProvider interface
   store/                 SQLite storage, migrations, queries
   survival/              Content-hash survival analysis

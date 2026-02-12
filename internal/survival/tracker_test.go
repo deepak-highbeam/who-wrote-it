@@ -45,13 +45,13 @@ func insertTestData(t *testing.T, s *store.Store) {
 	t.Helper()
 
 	// Insert session events (AI tool writes) with content hashes.
-	if err := s.InsertSessionEvent("sess1", "tool_result", "Write", "main.go", "hash_a", baseTime, "{}"); err != nil {
+	if err := s.InsertSessionEvent("sess1", "tool_result", "Write", "main.go", "hash_a", baseTime, "{}", 0); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.InsertSessionEvent("sess1", "tool_result", "Write", "main.go", "hash_b", baseTime.Add(time.Second), "{}"); err != nil {
+	if err := s.InsertSessionEvent("sess1", "tool_result", "Write", "main.go", "hash_b", baseTime.Add(time.Second), "{}", 0); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.InsertSessionEvent("sess1", "tool_result", "Write", "util.go", "hash_c", baseTime.Add(2*time.Second), "{}"); err != nil {
+	if err := s.InsertSessionEvent("sess1", "tool_result", "Write", "util.go", "hash_c", baseTime.Add(2*time.Second), "{}", 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -228,7 +228,7 @@ func TestAnalyze_NoBlameData(t *testing.T) {
 	defer cleanup()
 
 	// Insert attributions but NO blame lines.
-	if err := s.InsertSessionEvent("sess1", "tool_result", "Write", "main.go", "hash_a", baseTime, "{}"); err != nil {
+	if err := s.InsertSessionEvent("sess1", "tool_result", "Write", "main.go", "hash_a", baseTime, "{}", 0); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.InsertFileEvent("/proj", "main.go", "write", baseTime); err != nil {

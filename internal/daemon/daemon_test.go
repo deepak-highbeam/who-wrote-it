@@ -31,7 +31,7 @@ func TestAttributionPipeline(t *testing.T) {
 	}
 
 	// Insert a session event on the same file at the same timestamp.
-	if err := s.InsertSessionEvent("sess1", "tool_use", "Write", "/testproject/main.go", "abc123", now, "{}"); err != nil {
+	if err := s.InsertSessionEvent("sess1", "tool_use", "Write", "/testproject/main.go", "abc123", now, "{}", 10); err != nil {
 		t.Fatalf("InsertSessionEvent: %v", err)
 	}
 
@@ -65,8 +65,8 @@ func TestAttributionPipeline(t *testing.T) {
 
 	// Step 2: Classify authorship.
 	attr := classifier.Classify(*result)
-	if attr.Level != authorship.FullyAI {
-		t.Errorf("Level = %q, want %q", attr.Level, authorship.FullyAI)
+	if attr.Level != authorship.MostlyAI {
+		t.Errorf("Level = %q, want %q", attr.Level, authorship.MostlyAI)
 	}
 	if attr.Confidence != 0.95 {
 		t.Errorf("Confidence = %f, want 0.95", attr.Confidence)
@@ -126,8 +126,8 @@ func TestAttributionPipeline(t *testing.T) {
 	}
 
 	a := attributions[0]
-	if a.AuthorshipLevel != "fully_ai" {
-		t.Errorf("stored AuthorshipLevel = %q, want %q", a.AuthorshipLevel, "fully_ai")
+	if a.AuthorshipLevel != "mostly_ai" {
+		t.Errorf("stored AuthorshipLevel = %q, want %q", a.AuthorshipLevel, "mostly_ai")
 	}
 	if a.FirstAuthor != "ai" {
 		t.Errorf("stored FirstAuthor = %q, want %q", a.FirstAuthor, "ai")
@@ -186,8 +186,8 @@ func TestAttributionPipelineNoSessionMatch(t *testing.T) {
 
 	// Classify -- should be fully human.
 	attr := classifier.Classify(*result)
-	if attr.Level != authorship.FullyHuman {
-		t.Errorf("Level = %q, want %q", attr.Level, authorship.FullyHuman)
+	if attr.Level != authorship.MostlyHuman {
+		t.Errorf("Level = %q, want %q", attr.Level, authorship.MostlyHuman)
 	}
 	if attr.Confidence != 1.0 {
 		t.Errorf("Confidence = %f, want 1.0", attr.Confidence)
@@ -246,8 +246,8 @@ func TestAttributionPipelineNoSessionMatch(t *testing.T) {
 	}
 
 	a := attributions[0]
-	if a.AuthorshipLevel != "fully_human" {
-		t.Errorf("stored AuthorshipLevel = %q, want %q", a.AuthorshipLevel, "fully_human")
+	if a.AuthorshipLevel != "mostly_human" {
+		t.Errorf("stored AuthorshipLevel = %q, want %q", a.AuthorshipLevel, "mostly_human")
 	}
 	if a.FirstAuthor != "human" {
 		t.Errorf("stored FirstAuthor = %q, want %q", a.FirstAuthor, "human")

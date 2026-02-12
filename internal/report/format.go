@@ -31,40 +31,39 @@ func FormatProjectReport(r *ProjectReport) string {
 	b.WriteString(fmt.Sprintf("Meaningful AI: %s%s%.1f%%%s\n",
 		bold, colorForPct(r.MeaningfulAIPct), r.MeaningfulAIPct, reset))
 	b.WriteString(fmt.Sprintf("Raw AI:        %.1f%%\n", r.RawAIPct))
-	b.WriteString(fmt.Sprintf("Total files:   %d\n\n", r.TotalFiles))
+	b.WriteString(fmt.Sprintf("Total files:   %d\n", r.TotalFiles))
+	b.WriteString(fmt.Sprintf("Total lines:   %d (%d AI)\n\n", r.TotalLines, r.AILines))
 
-	// Spectrum breakdown table.
+	// Spectrum breakdown table (3 levels).
 	b.WriteString(bold + "Authorship Spectrum" + reset + "\n")
-	b.WriteString(strings.Repeat("-", 50) + "\n")
-	b.WriteString(fmt.Sprintf("%-30s %6s %7s\n", "Level", "Count", "Pct"))
-	b.WriteString(strings.Repeat("-", 50) + "\n")
+	b.WriteString(strings.Repeat("-", 35) + "\n")
+	b.WriteString(fmt.Sprintf("%-20s %12s\n", "Level", "Files"))
+	b.WriteString(strings.Repeat("-", 35) + "\n")
 
 	spectrumLevels := []string{
-		"fully_ai",
-		"ai_first_human_revised",
-		"human_first_ai_revised",
-		"ai_suggested_human_written",
-		"fully_human",
+		"mostly_ai",
+		"mixed",
+		"mostly_human",
 	}
-	totalEvents := 0
+	totalFiles := 0
 	for _, count := range r.ByAuthorship {
-		totalEvents += count
+		totalFiles += count
 	}
 	for _, level := range spectrumLevels {
 		count := r.ByAuthorship[level]
 		pct := 0.0
-		if totalEvents > 0 {
-			pct = float64(count) / float64(totalEvents) * 100.0
+		if totalFiles > 0 {
+			pct = float64(count) / float64(totalFiles) * 100.0
 		}
-		b.WriteString(fmt.Sprintf("%-30s %6d %6.1f%%\n", level, count, pct))
+		b.WriteString(fmt.Sprintf("%-20s %4d (%4.1f%%)\n", level, count, pct))
 	}
 	b.WriteString("\n")
 
 	// Work-type distribution table.
 	b.WriteString(bold + "Work Type Distribution" + reset + "\n")
-	b.WriteString(strings.Repeat("-", 60) + "\n")
-	b.WriteString(fmt.Sprintf("%-18s %-8s %5s %7s %6s\n", "Work Type", "Tier", "Files", "AI%", "Weight"))
-	b.WriteString(strings.Repeat("-", 60) + "\n")
+	b.WriteString(strings.Repeat("-", 70) + "\n")
+	b.WriteString(fmt.Sprintf("%-18s %-8s %5s %8s %6s %6s\n", "Work Type", "Tier", "Files", "Lines", "AI%", "Weight"))
+	b.WriteString(strings.Repeat("-", 70) + "\n")
 
 	// Sort work types for stable output.
 	wtOrder := []string{"architecture", "core_logic", "bug_fix", "edge_case", "boilerplate", "test_scaffolding"}
@@ -73,8 +72,9 @@ func FormatProjectReport(r *ProjectReport) string {
 		if !ok {
 			continue
 		}
-		b.WriteString(fmt.Sprintf("%-18s %-8s %5d %s%6.1f%%%s %6.1f\n",
+		b.WriteString(fmt.Sprintf("%-18s %-8s %5d %8d %s%5.1f%%%s %6.1f\n",
 			wt, summary.Tier, summary.Files,
+			summary.TotalLines,
 			colorForPct(summary.AIPct), summary.AIPct, reset,
 			summary.Weight))
 	}
@@ -83,9 +83,9 @@ func FormatProjectReport(r *ProjectReport) string {
 	// Top files sorted by AI%.
 	if len(r.Files) > 0 {
 		b.WriteString(bold + "Files by AI %" + reset + "\n")
-		b.WriteString(strings.Repeat("-", 70) + "\n")
-		b.WriteString(fmt.Sprintf("%-40s %-16s %6s %6s\n", "File", "Work Type", "AI%", "Events"))
-		b.WriteString(strings.Repeat("-", 70) + "\n")
+		b.WriteString(strings.Repeat("-", 80) + "\n")
+		b.WriteString(fmt.Sprintf("%-35s %-16s %6s %7s %8s\n", "File", "Work Type", "AI%", "Lines", "Level"))
+		b.WriteString(strings.Repeat("-", 80) + "\n")
 
 		maxFiles := len(r.Files)
 		if maxFiles > 20 {
@@ -93,13 +93,13 @@ func FormatProjectReport(r *ProjectReport) string {
 		}
 		for _, f := range r.Files[:maxFiles] {
 			name := f.FilePath
-			if len(name) > 39 {
-				name = "..." + name[len(name)-36:]
+			if len(name) > 34 {
+				name = "..." + name[len(name)-31:]
 			}
-			b.WriteString(fmt.Sprintf("%-40s %-16s %s%5.1f%%%s %6d\n",
+			b.WriteString(fmt.Sprintf("%-35s %-16s %s%5.1f%%%s %7d %8s\n",
 				name, f.WorkType,
 				colorForPct(f.MeaningfulAIPct), f.MeaningfulAIPct, reset,
-				f.TotalEvents))
+				f.TotalLines, f.AuthorshipLevel))
 		}
 		if len(r.Files) > 20 {
 			b.WriteString(fmt.Sprintf("... and %d more files\n", len(r.Files)-20))
@@ -121,24 +121,24 @@ func FormatFileReport(r *FileReport) string {
 	b.WriteString(fmt.Sprintf("AI %%:      %s%s%.1f%%%s\n",
 		bold, colorForPct(r.MeaningfulAIPct), r.MeaningfulAIPct, reset))
 	b.WriteString(fmt.Sprintf("Raw AI %%:  %.1f%%\n", r.RawAIPct))
+	b.WriteString(fmt.Sprintf("Lines:     %d total, %d AI\n", r.TotalLines, r.AILines))
+	b.WriteString(fmt.Sprintf("Level:     %s\n", r.AuthorshipLevel))
 	b.WriteString(fmt.Sprintf("Events:    %d total, %d AI\n\n", r.TotalEvents, r.AIEventCount))
 
 	b.WriteString(bold + "Authorship Breakdown" + reset + "\n")
 	b.WriteString(strings.Repeat("-", 40) + "\n")
-	b.WriteString(fmt.Sprintf("%-30s %6s\n", "Level", "Count"))
+	b.WriteString(fmt.Sprintf("%-20s %6s\n", "Level", "Count"))
 	b.WriteString(strings.Repeat("-", 40) + "\n")
 
 	levels := []string{
-		"fully_ai",
-		"ai_first_human_revised",
-		"human_first_ai_revised",
-		"ai_suggested_human_written",
-		"fully_human",
+		"mostly_ai",
+		"mixed",
+		"mostly_human",
 	}
 	for _, level := range levels {
 		count := r.AuthorshipCounts[level]
 		if count > 0 {
-			b.WriteString(fmt.Sprintf("%-30s %6d\n", level, count))
+			b.WriteString(fmt.Sprintf("%-20s %6d\n", level, count))
 		}
 	}
 

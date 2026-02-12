@@ -1,6 +1,7 @@
 // Package metrics computes meaningful AI percentage metrics that weight
 // different types of work differently. Architecture and core logic have
 // higher impact than boilerplate and test scaffolding.
+// Line counts from session events are used for per-file AI% calculation.
 package metrics
 
 import (
@@ -14,9 +15,12 @@ type FileMetrics struct {
 	WorkType         string
 	AuthorshipCounts map[string]int // authorship_level -> count
 	TotalEvents      int
-	AIEventCount     int     // fully_ai + ai_first_human_revised
+	AIEventCount     int     // events where authorship is AI-related
 	MeaningfulAIPct  float64 // weighted AI percentage
 	RawAIPct         float64 // unweighted AI percentage (for comparison)
+	TotalLines       int     // total lines across all attributions
+	AILines          int     // lines from AI-authored attributions
+	AuthorshipLevel  string  // 3-level computed from line ratio: mostly_ai, mixed, mostly_human
 }
 
 // ProjectMetrics holds aggregate metrics for an entire project.
@@ -28,6 +32,8 @@ type ProjectMetrics struct {
 	RawAIPct        float64                    // unweighted aggregate
 	ByWorkType      map[string]WorkTypeBreakdown
 	ByAuthorship    map[string]int             // authorship_level -> total count
+	TotalLines      int                        // total lines across all files
+	AILines         int                        // total AI lines across all files
 }
 
 // WorkTypeBreakdown holds per-work-type aggregate metrics.
@@ -39,11 +45,14 @@ type WorkTypeBreakdown struct {
 	AIEventCount int
 	TotalEvents  int
 	AIPct        float64
+	AILines      int
+	TotalLines   int
 }
 
 // aiAuthorshipLevels are the authorship levels that count as AI-authored.
-// Both fully_ai and ai_first_human_revised represent direct AI authorship.
+// Includes both new 3-level names and legacy 5-level names for backward compat.
 var aiAuthorshipLevels = map[string]bool{
+	"mostly_ai":              true,
 	"fully_ai":               true,
 	"ai_first_human_revised": true,
 }
@@ -56,7 +65,18 @@ func NewCalculator() *Calculator {
 	return &Calculator{}
 }
 
+// effectiveLines returns the lines_changed for an attribution, treating 0 as 1
+// for backward compatibility with old data that doesn't have line counts.
+func effectiveLines(linesChanged int) int {
+	if linesChanged <= 0 {
+		return 1
+	}
+	return linesChanged
+}
+
 // ComputeFileMetrics computes metrics for a single file from its attributions.
+// Line counts are used to weight the AI percentage — a 200-line Write counts
+// more than a 2-line Edit.
 func (c *Calculator) ComputeFileMetrics(filePath string, attributions []store.AttributionWithWorkType) FileMetrics {
 	fm := FileMetrics{
 		FilePath:         filePath,
@@ -68,8 +88,6 @@ func (c *Calculator) ComputeFileMetrics(filePath string, attributions []store.At
 	}
 
 	// Use the first attribution's work_type for the file-level work type.
-	// All attributions for a file should have the same work_type since
-	// classification is per-file.
 	fm.WorkType = attributions[0].WorkType
 	if fm.WorkType == "" {
 		fm.WorkType = string(worktype.CoreLogic)
@@ -78,16 +96,29 @@ func (c *Calculator) ComputeFileMetrics(filePath string, attributions []store.At
 	for _, attr := range attributions {
 		fm.TotalEvents++
 		fm.AuthorshipCounts[attr.AuthorshipLevel]++
+
+		lines := effectiveLines(attr.LinesChanged)
+		fm.TotalLines += lines
+
 		if aiAuthorshipLevels[attr.AuthorshipLevel] {
 			fm.AIEventCount++
+			fm.AILines += lines
 		}
 	}
 
-	if fm.TotalEvents > 0 {
-		fm.RawAIPct = float64(fm.AIEventCount) / float64(fm.TotalEvents) * 100.0
-		// Per-file meaningful AI % is the same as raw AI % because
-		// weighting applies across files at the project level.
+	if fm.TotalLines > 0 {
+		fm.RawAIPct = float64(fm.AILines) / float64(fm.TotalLines) * 100.0
 		fm.MeaningfulAIPct = fm.RawAIPct
+	}
+
+	// Compute 3-level authorship from line ratio.
+	switch {
+	case fm.RawAIPct > 70:
+		fm.AuthorshipLevel = "mostly_ai"
+	case fm.RawAIPct >= 30:
+		fm.AuthorshipLevel = "mixed"
+	default:
+		fm.AuthorshipLevel = "mostly_human"
 	}
 
 	return fm
@@ -95,7 +126,7 @@ func (c *Calculator) ComputeFileMetrics(filePath string, attributions []store.At
 
 // ComputeProjectMetrics computes aggregate metrics for a project from all
 // attributions. The meaningful AI percentage weights each file's contribution
-// by its work type weight.
+// by its work type weight and uses line counts for accuracy.
 func (c *Calculator) ComputeProjectMetrics(projectPath string, allAttributions []store.AttributionWithWorkType) ProjectMetrics {
 	pm := ProjectMetrics{
 		ProjectPath:  projectPath,
@@ -117,8 +148,6 @@ func (c *Calculator) ComputeProjectMetrics(projectPath string, allAttributions [
 
 	var totalWeightedAI float64
 	var totalWeightedAll float64
-	var totalRawAI int
-	var totalRawAll int
 
 	for filePath, fileAttrs := range byFile {
 		fm := c.ComputeFileMetrics(filePath, fileAttrs)
@@ -128,17 +157,16 @@ func (c *Calculator) ComputeProjectMetrics(projectPath string, allAttributions [
 		wt := worktype.WorkType(fm.WorkType)
 		weight, ok := worktype.WorkTypeWeights[wt]
 		if !ok {
-			// Unknown work type defaults to CoreLogic weight.
 			weight = worktype.WorkTypeWeights[worktype.CoreLogic]
 		}
 
-		// Weighted contribution to project metric.
-		totalWeightedAI += float64(fm.AIEventCount) * weight
-		totalWeightedAll += float64(fm.TotalEvents) * weight
+		// Weighted contribution using line counts.
+		totalWeightedAI += float64(fm.AILines) * weight
+		totalWeightedAll += float64(fm.TotalLines) * weight
 
-		// Raw (unweighted) totals.
-		totalRawAI += fm.AIEventCount
-		totalRawAll += fm.TotalEvents
+		// Raw (unweighted) totals using line counts.
+		pm.AILines += fm.AILines
+		pm.TotalLines += fm.TotalLines
 
 		// Aggregate by work type.
 		breakdown, exists := pm.ByWorkType[fm.WorkType]
@@ -153,6 +181,8 @@ func (c *Calculator) ComputeProjectMetrics(projectPath string, allAttributions [
 		breakdown.FileCount++
 		breakdown.AIEventCount += fm.AIEventCount
 		breakdown.TotalEvents += fm.TotalEvents
+		breakdown.AILines += fm.AILines
+		breakdown.TotalLines += fm.TotalLines
 		pm.ByWorkType[fm.WorkType] = breakdown
 
 		// Aggregate by authorship level.
@@ -165,14 +195,14 @@ func (c *Calculator) ComputeProjectMetrics(projectPath string, allAttributions [
 	if totalWeightedAll > 0 {
 		pm.MeaningfulAIPct = totalWeightedAI / totalWeightedAll * 100.0
 	}
-	if totalRawAll > 0 {
-		pm.RawAIPct = float64(totalRawAI) / float64(totalRawAll) * 100.0
+	if pm.TotalLines > 0 {
+		pm.RawAIPct = float64(pm.AILines) / float64(pm.TotalLines) * 100.0
 	}
 
-	// Compute per-work-type AI percentages.
+	// Compute per-work-type AI percentages using line counts.
 	for key, bd := range pm.ByWorkType {
-		if bd.TotalEvents > 0 {
-			bd.AIPct = float64(bd.AIEventCount) / float64(bd.TotalEvents) * 100.0
+		if bd.TotalLines > 0 {
+			bd.AIPct = float64(bd.AILines) / float64(bd.TotalLines) * 100.0
 		}
 		pm.ByWorkType[key] = bd
 	}

@@ -33,14 +33,13 @@ func GenerateComment(pr *report.ProjectReport) string {
 	for _, count := range pr.ByAuthorship {
 		totalEvents += count
 	}
-	fullyAI := pr.ByAuthorship["fully_ai"]
-	aiFirst := pr.ByAuthorship["ai_first_human_revised"]
-	humanFirst := pr.ByAuthorship["human_first_ai_revised"]
-	fullyHuman := pr.ByAuthorship["fully_human"]
+	mostlyAI := pr.ByAuthorship["mostly_ai"]
+	mixed := pr.ByAuthorship["mixed"]
+	mostlyHuman := pr.ByAuthorship["mostly_human"]
 
 	b.WriteString(fmt.Sprintf("**Meaningful AI: %.1f%%** &mdash; ", pr.MeaningfulAIPct))
-	b.WriteString(fmt.Sprintf("%d fully AI, %d AI-first, %d human-first, %d fully human",
-		fullyAI, aiFirst, humanFirst, fullyHuman))
+	b.WriteString(fmt.Sprintf("%d mostly AI, %d mixed, %d mostly human",
+		mostlyAI, mixed, mostlyHuman))
 	b.WriteString(fmt.Sprintf(" (%d events across %d files)\n\n", totalEvents, pr.TotalFiles))
 
 	// 3. Work-type breakdown table.
@@ -272,7 +271,7 @@ func FormatSurvivalReport(sr *SurvivalReport) string {
 		b.WriteString(fmt.Sprintf("%-28s %8s %8s %7s\n", "Level", "Tracked", "Survived", "Rate"))
 		b.WriteString(strings.Repeat("-", 50) + "\n")
 
-		levels := []string{"fully_ai", "ai_first_human_revised"}
+		levels := []string{"mostly_ai", "mixed", "mostly_human"}
 		for _, level := range levels {
 			bd, ok := sr.ByAuthorship[level]
 			if !ok {

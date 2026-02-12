@@ -4,6 +4,8 @@
 package correlation
 
 import (
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/anthropic/who-wrote-it/internal/authorship"
@@ -15,9 +17,6 @@ import (
 // correlated.
 const DefaultWindowMs = 5000
 
-// ActivityWindowMs is a wider window for detecting any AI session activity
-// (Read, Bash, Grep, etc.) that suggests the human was working alongside AI.
-const ActivityWindowMs = 30000
 
 // StoreReader is the minimal interface the correlator needs from the store.
 // Defined here so the correlator does not depend on the concrete *store.Store.
@@ -26,7 +25,6 @@ type StoreReader interface {
 	QueryFileEventsByProject(projectPath string, since time.Time) ([]store.FileEvent, error)
 	QuerySessionEventsInWindow(filePath string, start, end time.Time) ([]store.StoredSessionEvent, error)
 	QuerySessionEventsNearTimestamp(timestamp time.Time, windowMs int) ([]store.StoredSessionEvent, error)
-	QueryAnySessionEventsNearTimestamp(timestamp time.Time, windowMs int) ([]store.StoredSessionEvent, error)
 }
 
 // Correlator matches file events to session events by time proximity.
@@ -49,12 +47,10 @@ func New(reader StoreReader) *Correlator {
 // Matching strategy (in priority order):
 //  1. Exact file match: look for Write/Edit session events on the same
 //     file_path within the time window. Pick closest in time.
-//  2. Write/Edit proximity: look for ANY Write/Edit session event within the
-//     time window regardless of file path. Pick closest in time.
-//  3. Session activity: look for ANY session event (Read, Bash, Grep, etc.)
-//     within a wider window (30s). This catches "human wrote code while AI
-//     was active in the session" — the ai_suggested_human_written case.
-//  4. No match: no session activity detected near this file event.
+//  2. Fuzzy file match: look for Write/Edit session events on a file with
+//     the same name but different path prefix (handles path normalization,
+//     relative vs absolute paths, etc.). Pick closest in time.
+//  3. No match: no AI Write/Edit detected near this file event.
 func (c *Correlator) CorrelateFileEvent(fe store.FileEvent) (*authorship.CorrelationResult, error) {
 	windowDur := time.Duration(c.WindowMs) * time.Millisecond
 	start := fe.Timestamp.Add(-windowDur)
@@ -77,41 +73,34 @@ func (c *Correlator) CorrelateFileEvent(fe store.FileEvent) (*authorship.Correla
 		}, nil
 	}
 
-	// Step 2: Write/Edit proximity (any Write/Edit in window)
+	// Step 2: Fuzzy file match — Claude wrote a file with the same name but
+	// different path prefix (handles path normalization, relative vs absolute, etc.)
 	allSessions, err := c.store.QuerySessionEventsNearTimestamp(fe.Timestamp, c.WindowMs)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(allSessions) > 0 {
-		closest := pickClosest(fe.Timestamp, allSessions)
-		delta := absDurationMs(fe.Timestamp, closest.Timestamp)
-		return &authorship.CorrelationResult{
-			FileEvent:      fe,
-			MatchedSession: &closest,
-			TimeDeltaMs:    delta,
-			MatchType:      "time_proximity",
-		}, nil
+		// Filter to sessions where the file path is a suffix match.
+		var fuzzyMatches []store.StoredSessionEvent
+		for _, se := range allSessions {
+			if pathSuffixMatch(fe.FilePath, se.FilePath) {
+				fuzzyMatches = append(fuzzyMatches, se)
+			}
+		}
+		if len(fuzzyMatches) > 0 {
+			closest := pickClosest(fe.Timestamp, fuzzyMatches)
+			delta := absDurationMs(fe.Timestamp, closest.Timestamp)
+			return &authorship.CorrelationResult{
+				FileEvent:      fe,
+				MatchedSession: &closest,
+				TimeDeltaMs:    delta,
+				MatchType:      "fuzzy_file",
+			}, nil
+		}
 	}
 
-	// Step 3: any session activity in wider window (Read, Bash, Grep, etc.)
-	anySessions, err := c.store.QueryAnySessionEventsNearTimestamp(fe.Timestamp, ActivityWindowMs)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(anySessions) > 0 {
-		closest := pickClosest(fe.Timestamp, anySessions)
-		delta := absDurationMs(fe.Timestamp, closest.Timestamp)
-		return &authorship.CorrelationResult{
-			FileEvent:      fe,
-			MatchedSession: &closest,
-			TimeDeltaMs:    delta,
-			MatchType:      "session_activity",
-		}, nil
-	}
-
-	// Step 4: no match
+	// Step 3: no match
 	return &authorship.CorrelationResult{
 		FileEvent:      fe,
 		MatchedSession: nil,
@@ -143,30 +132,24 @@ func (c *Correlator) CorrelateAll(projectPath string, since time.Time) ([]author
 			result.TimeDeltaMs = absDurationMs(fe.Timestamp, closest.Timestamp)
 			result.MatchType = "exact_file"
 		} else {
-			// Try Write/Edit proximity
+			// Try fuzzy file match (same name, different prefix)
 			allSessions, err := c.store.QuerySessionEventsNearTimestamp(fe.Timestamp, c.WindowMs)
 			if err != nil {
 				return nil, err
 			}
-			if len(allSessions) > 0 {
-				closest := pickClosest(fe.Timestamp, allSessions)
+			var fuzzyMatches []store.StoredSessionEvent
+			for _, se := range allSessions {
+				if pathSuffixMatch(fe.FilePath, se.FilePath) {
+					fuzzyMatches = append(fuzzyMatches, se)
+				}
+			}
+			if len(fuzzyMatches) > 0 {
+				closest := pickClosest(fe.Timestamp, fuzzyMatches)
 				result.MatchedSession = &closest
 				result.TimeDeltaMs = absDurationMs(fe.Timestamp, closest.Timestamp)
-				result.MatchType = "time_proximity"
+				result.MatchType = "fuzzy_file"
 			} else {
-				// Try any session activity in wider window
-				anySessions, err := c.store.QueryAnySessionEventsNearTimestamp(fe.Timestamp, ActivityWindowMs)
-				if err != nil {
-					return nil, err
-				}
-				if len(anySessions) > 0 {
-					closest := pickClosest(fe.Timestamp, anySessions)
-					result.MatchedSession = &closest
-					result.TimeDeltaMs = absDurationMs(fe.Timestamp, closest.Timestamp)
-					result.MatchType = "session_activity"
-				} else {
-					result.MatchType = "none"
-				}
+				result.MatchType = "none"
 			}
 		}
 
@@ -202,4 +185,28 @@ func absDuration(a, b time.Time) time.Duration {
 // absDurationMs returns the absolute milliseconds between two times.
 func absDurationMs(a, b time.Time) int64 {
 	return absDuration(a, b).Milliseconds()
+}
+
+// pathSuffixMatch returns true if the two paths refer to the same file but
+// with different prefixes. This handles path normalization issues like
+// relative vs absolute paths, or symlinked directories.
+//
+// Examples:
+//
+//	pathSuffixMatch("foo.go", "/abs/path/to/foo.go")                        -> true
+//	pathSuffixMatch("src/main.go", "/project/src/main.go")                  -> true
+//	pathSuffixMatch("/a/b/handler.go", "/x/y/handler.go")                   -> false (different parent dir)
+//	pathSuffixMatch("main.go", "other.go")                                  -> false
+func pathSuffixMatch(a, b string) bool {
+	a = filepath.Clean(a)
+	b = filepath.Clean(b)
+	if a == b {
+		return true
+	}
+	// Ensure the shorter path appears as a path-boundary suffix of the longer.
+	// We prepend "/" to ensure we match at a directory boundary, not mid-name.
+	if len(a) > len(b) {
+		return strings.HasSuffix(a, string(filepath.Separator)+b)
+	}
+	return strings.HasSuffix(b, string(filepath.Separator)+a)
 }

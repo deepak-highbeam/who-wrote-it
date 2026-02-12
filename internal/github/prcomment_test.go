@@ -13,14 +13,16 @@ func TestGenerateComment_BasicOutput(t *testing.T) {
 		MeaningfulAIPct: 65.5,
 		RawAIPct:       70.0,
 		TotalFiles:     4,
+		TotalLines:     500,
+		AILines:        350,
 		ByAuthorship: map[string]int{
-			"fully_ai":               5,
-			"ai_first_human_revised": 2,
-			"fully_human":            3,
+			"mostly_ai":    5,
+			"mixed":        2,
+			"mostly_human": 3,
 		},
 		ByWorkType: map[string]report.WorkTypeSummary{
-			"core_logic":  {Files: 2, AIEvents: 4, TotalEvents: 5, AIPct: 80.0, Tier: "high", Weight: 3.0},
-			"boilerplate": {Files: 2, AIEvents: 3, TotalEvents: 3, AIPct: 100.0, Tier: "low", Weight: 1.0},
+			"core_logic":  {Files: 2, AIEvents: 4, TotalEvents: 5, AIPct: 80.0, Tier: "high", Weight: 3.0, AILines: 200, TotalLines: 300},
+			"boilerplate": {Files: 2, AIEvents: 3, TotalEvents: 3, AIPct: 100.0, Tier: "low", Weight: 1.0, AILines: 150, TotalLines: 150},
 		},
 		Files: []report.FileReport{
 			{
@@ -29,7 +31,10 @@ func TestGenerateComment_BasicOutput(t *testing.T) {
 				MeaningfulAIPct:  100.0,
 				TotalEvents:      5,
 				AIEventCount:     5,
-				AuthorshipCounts: map[string]int{"fully_ai": 5},
+				TotalLines:       200,
+				AILines:          200,
+				AuthorshipLevel:  "mostly_ai",
+				AuthorshipCounts: map[string]int{"mostly_ai": 5},
 			},
 			{
 				FilePath:         "util.go",
@@ -37,7 +42,10 @@ func TestGenerateComment_BasicOutput(t *testing.T) {
 				MeaningfulAIPct:  100.0,
 				TotalEvents:      3,
 				AIEventCount:     3,
-				AuthorshipCounts: map[string]int{"fully_ai": 3},
+				TotalLines:       150,
+				AILines:          150,
+				AuthorshipLevel:  "mostly_ai",
+				AuthorshipCounts: map[string]int{"mostly_ai": 3},
 			},
 			{
 				FilePath:         "handler.go",
@@ -45,7 +53,9 @@ func TestGenerateComment_BasicOutput(t *testing.T) {
 				MeaningfulAIPct:  0.0,
 				TotalEvents:      1,
 				AIEventCount:     0,
-				AuthorshipCounts: map[string]int{"fully_human": 1},
+				TotalLines:       50,
+				AuthorshipLevel:  "mostly_human",
+				AuthorshipCounts: map[string]int{"mostly_human": 1},
 			},
 		},
 	}
@@ -56,9 +66,9 @@ func TestGenerateComment_BasicOutput(t *testing.T) {
 	checks := []string{
 		"## Who Wrote It - Collaboration Summary",
 		"**Meaningful AI: 65.5%**",
-		"5 fully AI",
-		"2 AI-first",
-		"3 fully human",
+		"5 mostly AI",
+		"2 mixed",
+		"3 mostly human",
 		"### Work Type Breakdown",
 		"core_logic",
 		"boilerplate",
@@ -85,7 +95,7 @@ func TestGenerateComment_InsightCallouts(t *testing.T) {
 		ProjectPath:    "/proj",
 		MeaningfulAIPct: 30.0,
 		TotalFiles:     2,
-		ByAuthorship:   map[string]int{"fully_ai": 2, "fully_human": 4},
+		ByAuthorship:   map[string]int{"mostly_ai": 2, "mostly_human": 4},
 		ByWorkType: map[string]report.WorkTypeSummary{
 			"core_logic":  {Files: 1, AIEvents: 0, TotalEvents: 4, AIPct: 0.0, Tier: "high", Weight: 3.0},
 			"boilerplate": {Files: 1, AIEvents: 2, TotalEvents: 2, AIPct: 100.0, Tier: "low", Weight: 1.0},
@@ -108,12 +118,12 @@ func TestGenerateComment_NoNotableFiles(t *testing.T) {
 		ProjectPath:    "/proj",
 		MeaningfulAIPct: 50.0,
 		TotalFiles:     1,
-		ByAuthorship:   map[string]int{"fully_ai": 1},
+		ByAuthorship:   map[string]int{"mostly_ai": 1},
 		ByWorkType: map[string]report.WorkTypeSummary{
 			"core_logic": {Files: 1, AIEvents: 1, TotalEvents: 1, AIPct: 100.0, Tier: "high", Weight: 3.0},
 		},
 		Files: []report.FileReport{
-			{FilePath: "tiny.go", TotalEvents: 1, AIEventCount: 1, AuthorshipCounts: map[string]int{"fully_ai": 1}},
+			{FilePath: "tiny.go", TotalEvents: 1, AIEventCount: 1, AuthorshipCounts: map[string]int{"mostly_ai": 1}},
 		},
 	}
 
@@ -195,8 +205,8 @@ func TestFormatSurvivalReport_BasicOutput(t *testing.T) {
 		SurvivedCount: 85,
 		SurvivalRate:  85.0,
 		ByAuthorship: map[string]SurvivalBreakdown{
-			"fully_ai":               {Tracked: 60, Survived: 50, Rate: 83.3},
-			"ai_first_human_revised": {Tracked: 40, Survived: 35, Rate: 87.5},
+			"mostly_ai": {Tracked: 60, Survived: 50, Rate: 83.3},
+			"mixed":     {Tracked: 40, Survived: 35, Rate: 87.5},
 		},
 		ByWorkType: map[string]SurvivalBreakdown{
 			"core_logic":  {Tracked: 70, Survived: 60, Rate: 85.7},
@@ -211,8 +221,8 @@ func TestFormatSurvivalReport_BasicOutput(t *testing.T) {
 		"Tracked AI lines: 100",
 		"Survived:         85",
 		"85.0%",
-		"fully_ai",
-		"ai_first_human_revised",
+		"mostly_ai",
+		"mixed",
 		"core_logic",
 		"boilerplate",
 	}

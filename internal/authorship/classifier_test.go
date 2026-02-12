@@ -31,7 +31,7 @@ func ptrSession(se store.StoredSessionEvent) *store.StoredSessionEvent {
 // Classify tests
 // ---------------------------------------------------------------------------
 
-func TestClassify_NoMatch_FullyHuman(t *testing.T) {
+func TestClassify_NoMatch_MostlyHuman(t *testing.T) {
 	c := NewClassifier()
 	result := CorrelationResult{
 		FileEvent: makeFileEvent(1, "foo.go"),
@@ -40,8 +40,8 @@ func TestClassify_NoMatch_FullyHuman(t *testing.T) {
 
 	attr := c.Classify(result)
 
-	if attr.Level != FullyHuman {
-		t.Errorf("Level = %q, want %q", attr.Level, FullyHuman)
+	if attr.Level != MostlyHuman {
+		t.Errorf("Level = %q, want %q", attr.Level, MostlyHuman)
 	}
 	if attr.Confidence != 1.0 {
 		t.Errorf("Confidence = %f, want 1.0", attr.Confidence)
@@ -54,7 +54,7 @@ func TestClassify_NoMatch_FullyHuman(t *testing.T) {
 	}
 }
 
-func TestClassify_ExactMatchUnder2s_FullyAI(t *testing.T) {
+func TestClassify_ExactMatch_MostlyAI(t *testing.T) {
 	c := NewClassifier()
 	se := makeSessionEvent(10, "foo.go", 500*time.Millisecond)
 	result := CorrelationResult{
@@ -66,8 +66,8 @@ func TestClassify_ExactMatchUnder2s_FullyAI(t *testing.T) {
 
 	attr := c.Classify(result)
 
-	if attr.Level != FullyAI {
-		t.Errorf("Level = %q, want %q", attr.Level, FullyAI)
+	if attr.Level != MostlyAI {
+		t.Errorf("Level = %q, want %q", attr.Level, MostlyAI)
 	}
 	if attr.Confidence != 0.95 {
 		t.Errorf("Confidence = %f, want 0.95", attr.Confidence)
@@ -77,7 +77,7 @@ func TestClassify_ExactMatchUnder2s_FullyAI(t *testing.T) {
 	}
 }
 
-func TestClassify_ExactMatch2to5s_AIFirstHumanRevised(t *testing.T) {
+func TestClassify_ExactMatchLargerDelta_StillMostlyAI(t *testing.T) {
 	c := NewClassifier()
 	se := makeSessionEvent(10, "foo.go", 3*time.Second)
 	result := CorrelationResult{
@@ -89,60 +89,38 @@ func TestClassify_ExactMatch2to5s_AIFirstHumanRevised(t *testing.T) {
 
 	attr := c.Classify(result)
 
-	if attr.Level != AIFirstHumanRevised {
-		t.Errorf("Level = %q, want %q", attr.Level, AIFirstHumanRevised)
+	// Exact file match always maps to MostlyAI regardless of delta
+	if attr.Level != MostlyAI {
+		t.Errorf("Level = %q, want %q", attr.Level, MostlyAI)
 	}
-	if attr.Confidence != 0.7 {
-		t.Errorf("Confidence = %f, want 0.7", attr.Confidence)
+	if attr.Confidence != 0.95 {
+		t.Errorf("Confidence = %f, want 0.95", attr.Confidence)
 	}
 	if attr.FirstAuthor != "ai" {
 		t.Errorf("FirstAuthor = %q, want %q", attr.FirstAuthor, "ai")
 	}
 }
 
-func TestClassify_TimeProximity_AISuggestedHumanWritten(t *testing.T) {
+func TestClassify_FuzzyFile_MostlyAI(t *testing.T) {
 	c := NewClassifier()
-	se := makeSessionEvent(20, "bar.go", 2*time.Second)
+	se := makeSessionEvent(20, "/abs/path/to/foo.go", 2*time.Second)
 	result := CorrelationResult{
 		FileEvent:      makeFileEvent(1, "foo.go"),
 		MatchedSession: ptrSession(se),
 		TimeDeltaMs:    2000,
-		MatchType:      "time_proximity",
+		MatchType:      "fuzzy_file",
 	}
 
 	attr := c.Classify(result)
 
-	if attr.Level != AISuggestedHumanWritten {
-		t.Errorf("Level = %q, want %q", attr.Level, AISuggestedHumanWritten)
+	if attr.Level != MostlyAI {
+		t.Errorf("Level = %q, want %q", attr.Level, MostlyAI)
 	}
-	if attr.Confidence != 0.5 {
-		t.Errorf("Confidence = %f, want 0.5", attr.Confidence)
+	if attr.Confidence != 0.85 {
+		t.Errorf("Confidence = %f, want 0.85", attr.Confidence)
 	}
-	if attr.FirstAuthor != "human" {
-		t.Errorf("FirstAuthor = %q, want %q", attr.FirstAuthor, "human")
-	}
-}
-
-func TestClassify_LowConfidence_Uncertain(t *testing.T) {
-	// We test the uncertain flag by constructing a result that would
-	// naturally produce a confidence < 0.5.
-	// Since our current rules don't produce confidence < 0.5 naturally,
-	// we verify the threshold logic by checking that values at 0.5 are NOT
-	// marked uncertain (boundary condition).
-	c := NewClassifier()
-
-	// Time proximity gives confidence 0.5 -- not uncertain (< 0.5 required)
-	se := makeSessionEvent(20, "bar.go", 2*time.Second)
-	result := CorrelationResult{
-		FileEvent:      makeFileEvent(1, "foo.go"),
-		MatchedSession: ptrSession(se),
-		TimeDeltaMs:    2000,
-		MatchType:      "time_proximity",
-	}
-
-	attr := c.Classify(result)
-	if attr.Uncertain {
-		t.Error("Confidence=0.5 should NOT be uncertain (threshold is < 0.5)")
+	if attr.FirstAuthor != "ai" {
+		t.Errorf("FirstAuthor = %q, want %q", attr.FirstAuthor, "ai")
 	}
 }
 
@@ -154,7 +132,7 @@ func TestClassifyWithHistory_HumanEditingAICode(t *testing.T) {
 	c := NewClassifier()
 
 	prior := &Attribution{
-		Level:       FullyAI,
+		Level:       MostlyAI,
 		FirstAuthor: "ai",
 	}
 	result := CorrelationResult{
@@ -164,8 +142,8 @@ func TestClassifyWithHistory_HumanEditingAICode(t *testing.T) {
 
 	attr := c.ClassifyWithHistory(result, prior)
 
-	if attr.Level != AIFirstHumanRevised {
-		t.Errorf("Level = %q, want %q", attr.Level, AIFirstHumanRevised)
+	if attr.Level != Mixed {
+		t.Errorf("Level = %q, want %q", attr.Level, Mixed)
 	}
 	if attr.FirstAuthor != "ai" {
 		t.Errorf("FirstAuthor = %q, want %q (first-author-wins)", attr.FirstAuthor, "ai")
@@ -179,7 +157,7 @@ func TestClassifyWithHistory_AIEditingHumanCode(t *testing.T) {
 	c := NewClassifier()
 
 	prior := &Attribution{
-		Level:       FullyHuman,
+		Level:       MostlyHuman,
 		FirstAuthor: "human",
 	}
 	se := makeSessionEvent(10, "foo.go", 500*time.Millisecond)
@@ -192,8 +170,8 @@ func TestClassifyWithHistory_AIEditingHumanCode(t *testing.T) {
 
 	attr := c.ClassifyWithHistory(result, prior)
 
-	if attr.Level != HumanFirstAIRevised {
-		t.Errorf("Level = %q, want %q", attr.Level, HumanFirstAIRevised)
+	if attr.Level != Mixed {
+		t.Errorf("Level = %q, want %q", attr.Level, Mixed)
 	}
 	if attr.FirstAuthor != "human" {
 		t.Errorf("FirstAuthor = %q, want %q (first-author-wins)", attr.FirstAuthor, "human")
@@ -214,8 +192,8 @@ func TestClassifyWithHistory_NoPrior_FallsThrough(t *testing.T) {
 	attr := c.ClassifyWithHistory(result, nil)
 
 	// Should behave exactly like Classify
-	if attr.Level != FullyHuman {
-		t.Errorf("Level = %q, want %q (nil prior -> standard classify)", attr.Level, FullyHuman)
+	if attr.Level != MostlyHuman {
+		t.Errorf("Level = %q, want %q (nil prior -> standard classify)", attr.Level, MostlyHuman)
 	}
 	if attr.Confidence != 1.0 {
 		t.Errorf("Confidence = %f, want 1.0", attr.Confidence)
@@ -231,8 +209,8 @@ func TestClassifyFromGit_CoauthorTagClaude(t *testing.T) {
 
 	attr := c.ClassifyFromGit(true, "Claude Opus 4.6 <noreply@anthropic.com>")
 
-	if attr.Level != FullyAI {
-		t.Errorf("Level = %q, want %q", attr.Level, FullyAI)
+	if attr.Level != MostlyAI {
+		t.Errorf("Level = %q, want %q", attr.Level, MostlyAI)
 	}
 	if attr.Confidence != 0.6 {
 		t.Errorf("Confidence = %f, want 0.6", attr.Confidence)
@@ -247,8 +225,8 @@ func TestClassifyFromGit_CoauthorTagAnthropic(t *testing.T) {
 
 	attr := c.ClassifyFromGit(true, "Anthropic AI Bot")
 
-	if attr.Level != FullyAI {
-		t.Errorf("Level = %q, want %q", attr.Level, FullyAI)
+	if attr.Level != MostlyAI {
+		t.Errorf("Level = %q, want %q", attr.Level, MostlyAI)
 	}
 	if attr.Confidence != 0.6 {
 		t.Errorf("Confidence = %f, want 0.6", attr.Confidence)
@@ -260,8 +238,8 @@ func TestClassifyFromGit_NoCoauthorTag(t *testing.T) {
 
 	attr := c.ClassifyFromGit(false, "")
 
-	if attr.Level != FullyHuman {
-		t.Errorf("Level = %q, want %q", attr.Level, FullyHuman)
+	if attr.Level != MostlyHuman {
+		t.Errorf("Level = %q, want %q", attr.Level, MostlyHuman)
 	}
 	if attr.Confidence != 0.8 {
 		t.Errorf("Confidence = %f, want 0.8", attr.Confidence)
@@ -277,8 +255,8 @@ func TestClassifyFromGit_CoauthorTagNonClaude(t *testing.T) {
 	// Has a coauthor tag but not claude/anthropic -- treated as human
 	attr := c.ClassifyFromGit(true, "GitHub Copilot")
 
-	if attr.Level != FullyHuman {
-		t.Errorf("Level = %q, want %q", attr.Level, FullyHuman)
+	if attr.Level != MostlyHuman {
+		t.Errorf("Level = %q, want %q", attr.Level, MostlyHuman)
 	}
 	if attr.Confidence != 0.8 {
 		t.Errorf("Confidence = %f, want 0.8", attr.Confidence)
@@ -293,7 +271,7 @@ func TestFirstAuthorWins_AIAuthoredWithSubsequentAIEdit(t *testing.T) {
 	c := NewClassifier()
 
 	prior := &Attribution{
-		Level:       FullyAI,
+		Level:       MostlyAI,
 		FirstAuthor: "ai",
 	}
 
@@ -308,7 +286,7 @@ func TestFirstAuthorWins_AIAuthoredWithSubsequentAIEdit(t *testing.T) {
 
 	attr := c.ClassifyWithHistory(result, prior)
 
-	// Prior was AI, current is AI -- standard classify applies (FullyAI)
+	// Prior was AI, current is AI -- standard classify applies (MostlyAI)
 	// because the history rules only trigger on author transitions
 	if attr.FirstAuthor != "ai" {
 		t.Errorf("FirstAuthor = %q, want %q (first author wins)", attr.FirstAuthor, "ai")
@@ -321,19 +299,15 @@ func TestFirstAuthorWins_AIAuthoredWithSubsequentAIEdit(t *testing.T) {
 
 func TestAllAuthorshipLevels(t *testing.T) {
 	levels := []AuthorshipLevel{
-		FullyAI,
-		AIFirstHumanRevised,
-		HumanFirstAIRevised,
-		AISuggestedHumanWritten,
-		FullyHuman,
+		MostlyAI,
+		Mixed,
+		MostlyHuman,
 	}
 
 	expected := []string{
-		"fully_ai",
-		"ai_first_human_revised",
-		"human_first_ai_revised",
-		"ai_suggested_human_written",
-		"fully_human",
+		"mostly_ai",
+		"mixed",
+		"mostly_human",
 	}
 
 	for i, level := range levels {

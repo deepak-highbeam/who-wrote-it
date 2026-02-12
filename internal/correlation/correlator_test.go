@@ -12,10 +12,9 @@ import (
 // ---------------------------------------------------------------------------
 
 type mockStoreReader struct {
-	fileEvents       []store.FileEvent
-	sessionEvents    []store.StoredSessionEvent
-	nearEvents       []store.StoredSessionEvent
-	anyActivityEvents []store.StoredSessionEvent
+	fileEvents    []store.FileEvent
+	sessionEvents []store.StoredSessionEvent
+	nearEvents    []store.StoredSessionEvent
 }
 
 func (m *mockStoreReader) QueryFileEventsInWindow(filePath string, start, end time.Time) ([]store.FileEvent, error) {
@@ -66,19 +65,6 @@ func (m *mockStoreReader) QuerySessionEventsNearTimestamp(timestamp time.Time, w
 	return out, nil
 }
 
-func (m *mockStoreReader) QueryAnySessionEventsNearTimestamp(timestamp time.Time, windowMs int) ([]store.StoredSessionEvent, error) {
-	windowDur := time.Duration(windowMs) * time.Millisecond
-	start := timestamp.Add(-windowDur)
-	end := timestamp.Add(windowDur)
-
-	var out []store.StoredSessionEvent
-	for _, se := range m.anyActivityEvents {
-		if !se.Timestamp.Before(start) && !se.Timestamp.After(end) {
-			out = append(out, se)
-		}
-	}
-	return out, nil
-}
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -186,23 +172,23 @@ func TestCorrelateFileEvent_NoSessionEvents(t *testing.T) {
 	}
 }
 
-func TestCorrelateFileEvent_TimeProximityFallback(t *testing.T) {
-	// File event for "foo.go", no session events for foo.go,
-	// but Write event for "bar.go" at T+2s in nearEvents.
+func TestCorrelateFileEvent_FuzzyFileMatch(t *testing.T) {
+	// File event for "foo.go" (relative), no exact session match,
+	// but Claude wrote "/abs/path/to/foo.go" (same basename, different prefix).
 	fe := store.FileEvent{
 		ID: 1, ProjectPath: "/proj", FilePath: "foo.go",
 		EventType: "write", Timestamp: baseTime,
 	}
-	nearSe := store.StoredSessionEvent{
+	fuzzySe := store.StoredSessionEvent{
 		ID: 20, SessionID: "s1", EventType: "tool_use", ToolName: "Write",
-		FilePath: "bar.go", Timestamp: baseTime.Add(2 * time.Second),
+		FilePath: "/abs/path/to/foo.go", Timestamp: baseTime.Add(2 * time.Second),
 	}
 
 	mock := &mockStoreReader{
-		// No session events for foo.go
+		// No exact match for "foo.go"
 		sessionEvents: []store.StoredSessionEvent{},
-		// But bar.go is nearby in time
-		nearEvents: []store.StoredSessionEvent{nearSe},
+		// But "/abs/path/to/foo.go" is nearby — same file, different prefix
+		nearEvents: []store.StoredSessionEvent{fuzzySe},
 	}
 
 	c := New(mock)
@@ -211,17 +197,43 @@ func TestCorrelateFileEvent_TimeProximityFallback(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if result.MatchType != "time_proximity" {
-		t.Errorf("MatchType = %q, want %q", result.MatchType, "time_proximity")
+	if result.MatchType != "fuzzy_file" {
+		t.Errorf("MatchType = %q, want %q", result.MatchType, "fuzzy_file")
 	}
 	if result.MatchedSession == nil {
-		t.Fatal("MatchedSession is nil, want non-nil for time_proximity")
+		t.Fatal("MatchedSession is nil, want non-nil for fuzzy_file")
 	}
 	if result.MatchedSession.ID != 20 {
 		t.Errorf("MatchedSession.ID = %d, want 20", result.MatchedSession.ID)
 	}
-	if result.TimeDeltaMs != 2000 {
-		t.Errorf("TimeDeltaMs = %d, want 2000", result.TimeDeltaMs)
+}
+
+func TestCorrelateFileEvent_DifferentFileNoFuzzyMatch(t *testing.T) {
+	// File event for "foo.go", Claude wrote "bar.go" nearby in time.
+	// These are different files — should NOT match via fuzzy.
+	fe := store.FileEvent{
+		ID: 1, ProjectPath: "/proj", FilePath: "foo.go",
+		EventType: "write", Timestamp: baseTime,
+	}
+	differentSe := store.StoredSessionEvent{
+		ID: 20, SessionID: "s1", EventType: "tool_use", ToolName: "Write",
+		FilePath: "bar.go", Timestamp: baseTime.Add(2 * time.Second),
+	}
+
+	mock := &mockStoreReader{
+		sessionEvents: []store.StoredSessionEvent{},
+		nearEvents:    []store.StoredSessionEvent{differentSe},
+	}
+
+	c := New(mock)
+	result, err := c.CorrelateFileEvent(fe)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// bar.go is a completely different file — should fall through to "none"
+	if result.MatchType != "none" {
+		t.Errorf("MatchType = %q, want %q (different file should not fuzzy match)", result.MatchType, "none")
 	}
 }
 
@@ -343,6 +355,29 @@ func TestPickClosest(t *testing.T) {
 	got := pickClosest(ref, sessions)
 	if got.ID != 2 {
 		t.Errorf("pickClosest returned ID=%d, want 2 (closest to ref)", got.ID)
+	}
+}
+
+func TestPathSuffixMatch(t *testing.T) {
+	tests := []struct {
+		a, b string
+		want bool
+	}{
+		{"foo.go", "/abs/path/to/foo.go", true},
+		{"src/main.go", "/project/src/main.go", true},
+		{"/project/src/main.go", "src/main.go", true},
+		{"foo.go", "foo.go", true},
+		{"foo.go", "bar.go", false},
+		{"/a/b/handler.go", "/x/y/handler.go", false}, // different parent dir
+		{"main.go", "omain.go", false},                 // suffix of name, not path
+		{"", "foo.go", false},
+	}
+
+	for _, tt := range tests {
+		got := pathSuffixMatch(tt.a, tt.b)
+		if got != tt.want {
+			t.Errorf("pathSuffixMatch(%q, %q) = %v, want %v", tt.a, tt.b, got, tt.want)
+		}
 	}
 }
 

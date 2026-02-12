@@ -161,7 +161,9 @@ type writeInput struct {
 }
 
 type editInput struct {
-	FilePath string `json:"file_path"`
+	FilePath  string `json:"file_path"`
+	OldString string `json:"old_string"`
+	NewString string `json:"new_string"`
 }
 
 type readInput struct {
@@ -215,6 +217,8 @@ func extractToolUse(env *jsonlEnvelope, rawJSON string) (*SessionEvent, error) {
 			}
 			event.FilePath = inp.FilePath
 			event.ContentHash = hashContent(inp.Content)
+			event.LinesChanged = countLines(inp.Content)
+			event.DiffContent = inp.Content
 
 		case "Edit":
 			var inp editInput
@@ -223,6 +227,10 @@ func extractToolUse(env *jsonlEnvelope, rawJSON string) (*SessionEvent, error) {
 				return nil, nil
 			}
 			event.FilePath = inp.FilePath
+			newOnly := editOnlyNewLines(inp.OldString, inp.NewString)
+			event.ContentHash = hashContent(newOnly)
+			event.LinesChanged = countLines(newOnly)
+			event.DiffContent = newOnly
 
 		case "Read":
 			var inp readInput
@@ -273,6 +281,64 @@ func sessionIDFromPath(path string) string {
 	return projectHash + "/" + sessionFile
 }
 
+// countLines returns the number of lines in s. Returns 0 for empty string.
+// A trailing newline does not count as an extra line (standard for file content).
+func countLines(s string) int {
+	if s == "" {
+		return 0
+	}
+	n := strings.Count(s, "\n")
+	if !strings.HasSuffix(s, "\n") {
+		n++
+	}
+	return n
+}
+
+// ExtractDiffContent parses a raw JSONL line and returns the Write content
+// or Edit new_string. Used by the daemon at attribution time to feed the
+// work type classifier.
+func ExtractDiffContent(rawJSON string) string {
+	line := trimLine([]byte(rawJSON))
+	if len(line) == 0 || !containsToolUse(line) {
+		return ""
+	}
+
+	var envelope jsonlEnvelope
+	if err := json.Unmarshal(line, &envelope); err != nil {
+		return ""
+	}
+
+	var blocks []contentBlock
+	if len(envelope.Message) > 0 {
+		var msg messageWrapper
+		if err := json.Unmarshal(envelope.Message, &msg); err == nil {
+			blocks = msg.Content
+		}
+	}
+	if len(blocks) == 0 && len(envelope.Content) > 0 {
+		_ = json.Unmarshal(envelope.Content, &blocks)
+	}
+
+	for _, block := range blocks {
+		if block.Type != "tool_use" {
+			continue
+		}
+		switch block.Name {
+		case "Write":
+			var inp writeInput
+			if err := json.Unmarshal(block.Input, &inp); err == nil {
+				return inp.Content
+			}
+		case "Edit":
+			var inp editInput
+			if err := json.Unmarshal(block.Input, &inp); err == nil {
+				return editOnlyNewLines(inp.OldString, inp.NewString)
+			}
+		}
+	}
+	return ""
+}
+
 // trimLine removes leading/trailing whitespace and BOM.
 func trimLine(line []byte) []byte {
 	// Strip UTF-8 BOM if present.
@@ -289,4 +355,41 @@ func trimLine(line []byte) []byte {
 		end--
 	}
 	return line[start:end]
+}
+
+// editOnlyNewLines returns only the lines in newStr that are genuinely new
+// (not present in oldStr). This prevents Edit context lines from being
+// counted as AI-authored. Uses trimmed-string comparison (matching the
+// approach in metrics/linecalc.go) so indentation changes don't cause
+// false negatives.
+func editOnlyNewLines(oldStr, newStr string) string {
+	if oldStr == "" {
+		return newStr
+	}
+
+	oldLines := strings.Split(oldStr, "\n")
+	newLines := strings.Split(newStr, "\n")
+
+	// Build frequency map of trimmed old lines.
+	oldFreq := make(map[string]int)
+	for _, line := range oldLines {
+		trimmed := strings.TrimSpace(line)
+		oldFreq[trimmed]++
+	}
+
+	// Collect lines from newStr that don't appear in oldStr.
+	var result []string
+	for _, line := range newLines {
+		trimmed := strings.TrimSpace(line)
+		if oldFreq[trimmed] > 0 {
+			oldFreq[trimmed]--
+		} else {
+			result = append(result, line)
+		}
+	}
+
+	if len(result) == 0 {
+		return ""
+	}
+	return strings.Join(result, "\n")
 }

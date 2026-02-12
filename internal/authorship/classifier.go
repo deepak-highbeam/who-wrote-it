@@ -1,6 +1,7 @@
-// Package authorship provides a five-level authorship spectrum classifier.
-// It assigns attribution labels (fully AI, mixed, fully human) based on
+// Package authorship provides a three-level authorship spectrum classifier.
+// It assigns attribution labels (mostly_ai, mixed, mostly_human) based on
 // correlation results that pair file system events with AI session events.
+// The final per-file level is computed at metrics time from aggregated line ratios.
 package authorship
 
 import (
@@ -10,28 +11,24 @@ import (
 	"github.com/anthropic/who-wrote-it/internal/store"
 )
 
-// AuthorshipLevel represents one of five levels on the authorship spectrum.
+// AuthorshipLevel represents one of three levels on the authorship spectrum.
 type AuthorshipLevel string
 
 const (
-	// FullyAI means the code was written entirely by an AI tool (e.g. Claude
-	// Write event matched within tight time window).
-	FullyAI AuthorshipLevel = "fully_ai"
+	// MostlyAI means the code was written primarily by an AI tool.
+	// Per-event: assigned when a session match is found (exact_file, fuzzy_file).
+	// Per-file: assigned when aggregated AI line ratio > 70%.
+	MostlyAI AuthorshipLevel = "mostly_ai"
 
-	// AIFirstHumanRevised means AI wrote the initial code and a human
-	// subsequently edited it.
-	AIFirstHumanRevised AuthorshipLevel = "ai_first_human_revised"
+	// Mixed means attribution is uncertain or shared between AI and human.
+	// Per-event: assigned when only session activity is detected nearby.
+	// Per-file: assigned when aggregated AI line ratio is 30-70%.
+	Mixed AuthorshipLevel = "mixed"
 
-	// HumanFirstAIRevised means a human wrote the initial code and AI
-	// subsequently edited it.
-	HumanFirstAIRevised AuthorshipLevel = "human_first_ai_revised"
-
-	// AISuggestedHumanWritten means AI was active (session event nearby) but
-	// did not directly write this file -- the human wrote it with AI context.
-	AISuggestedHumanWritten AuthorshipLevel = "ai_suggested_human_written"
-
-	// FullyHuman means no AI session activity was detected near the edit.
-	FullyHuman AuthorshipLevel = "fully_human"
+	// MostlyHuman means the code was written primarily by a human.
+	// Per-event: assigned when no AI session activity is detected.
+	// Per-file: assigned when aggregated AI line ratio < 30%.
+	MostlyHuman AuthorshipLevel = "mostly_human"
 )
 
 // CorrelationResult is the output of the correlation engine. Defined here
@@ -41,7 +38,7 @@ type CorrelationResult struct {
 	FileEvent      store.FileEvent
 	MatchedSession *store.StoredSessionEvent // nil if no match found
 	TimeDeltaMs    int64                     // absolute ms between events; 0 if no match
-	MatchType      string                    // "exact_file", "time_proximity", "none"
+	MatchType      string                    // "exact_file", "fuzzy_file", "none"
 }
 
 // Attribution is the final authorship classification for a file event.
@@ -69,12 +66,11 @@ func NewClassifier() *Classifier {
 // Classify assigns an authorship level and confidence to a single
 // CorrelationResult using the locked decision rules.
 //
-// Rules:
-//  1. No match (MatchType "none")          -> FullyHuman,               confidence 1.0
-//  2. Exact file match, delta < 2000ms     -> FullyAI,                  confidence 0.95
-//  3. Exact file match, delta 2000-5000ms  -> AIFirstHumanRevised,      confidence 0.7
-//  4. Time proximity only (different file)  -> AISuggestedHumanWritten,  confidence 0.5
-//  5. Confidence < 0.5                     -> Uncertain = true
+// Rules (per-event classification):
+//  1. No match (MatchType "none")                    -> MostlyHuman, confidence 1.0
+//  2. Exact file match (any delta)                   -> MostlyAI,    confidence 0.95
+//  3. Fuzzy file match (same name, different prefix) -> MostlyAI,    confidence 0.85
+//  4. Confidence < 0.5                               -> Uncertain = true
 func (c *Classifier) Classify(result CorrelationResult) Attribution {
 	attr := Attribution{
 		FilePath:    result.FileEvent.FilePath,
@@ -93,30 +89,20 @@ func (c *Classifier) Classify(result CorrelationResult) Attribution {
 
 	switch {
 	case result.MatchType == "none" || result.MatchedSession == nil:
-		attr.Level = FullyHuman
+		attr.Level = MostlyHuman
 		attr.Confidence = 1.0
 		attr.FirstAuthor = "human"
 
-	case result.MatchType == "exact_file" && result.TimeDeltaMs < 2000:
-		attr.Level = FullyAI
+	case result.MatchType == "exact_file":
+		attr.Level = MostlyAI
 		attr.Confidence = 0.95
 		attr.FirstAuthor = "ai"
 
-	case result.MatchType == "exact_file" && result.TimeDeltaMs >= 2000:
-		attr.Level = AIFirstHumanRevised
-		attr.Confidence = 0.7
+	case result.MatchType == "fuzzy_file":
+		attr.Level = MostlyAI
+		attr.Confidence = 0.85
 		attr.FirstAuthor = "ai"
 
-	case result.MatchType == "time_proximity":
-		attr.Level = AISuggestedHumanWritten
-		attr.Confidence = 0.5
-		attr.FirstAuthor = "human"
-
-	case result.MatchType == "session_activity":
-		attr.Level = AISuggestedHumanWritten
-		attr.Confidence = 0.4
-		attr.FirstAuthor = "human"
-		attr.Uncertain = true
 	}
 
 	if attr.Confidence < 0.5 {
@@ -130,9 +116,9 @@ func (c *Classifier) Classify(result CorrelationResult) Attribution {
 // exists for the same file. If priorAttribution is nil, falls through to Classify.
 //
 // Rules:
-//   - Prior author = "ai", current has no session match -> AIFirstHumanRevised
+//   - Prior author = "ai", current has no session match -> Mixed
 //     (human editing AI code)
-//   - Prior author = "human", current has session match -> HumanFirstAIRevised
+//   - Prior author = "human", current has session match -> Mixed
 //     (AI editing human code)
 //   - Otherwise: standard Classify
 func (c *Classifier) ClassifyWithHistory(result CorrelationResult, priorAttribution *Attribution) Attribution {
@@ -144,7 +130,7 @@ func (c *Classifier) ClassifyWithHistory(result CorrelationResult, priorAttribut
 	if priorAttribution.FirstAuthor == "ai" &&
 		(result.MatchType == "none" || result.MatchedSession == nil) {
 		attr := c.Classify(result)
-		attr.Level = AIFirstHumanRevised
+		attr.Level = Mixed
 		attr.Confidence = 0.8
 		attr.FirstAuthor = "ai" // first-author-wins: AI was first
 		attr.Uncertain = false
@@ -156,7 +142,7 @@ func (c *Classifier) ClassifyWithHistory(result CorrelationResult, priorAttribut
 		result.MatchedSession != nil &&
 		result.MatchType != "none" {
 		attr := c.Classify(result)
-		attr.Level = HumanFirstAIRevised
+		attr.Level = Mixed
 		attr.Confidence = 0.8
 		attr.FirstAuthor = "human" // first-author-wins: human was first
 		attr.Uncertain = false
@@ -179,11 +165,11 @@ func (c *Classifier) ClassifyFromGit(hasCoauthorTag bool, coauthorName string) A
 
 	lower := strings.ToLower(coauthorName)
 	if hasCoauthorTag && (strings.Contains(lower, "claude") || strings.Contains(lower, "anthropic")) {
-		attr.Level = FullyAI
+		attr.Level = MostlyAI
 		attr.Confidence = 0.6
 		attr.FirstAuthor = "ai"
 	} else {
-		attr.Level = FullyHuman
+		attr.Level = MostlyHuman
 		attr.Confidence = 0.8
 		attr.FirstAuthor = "human"
 	}

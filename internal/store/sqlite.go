@@ -88,12 +88,12 @@ func (s *Store) InsertFileEvent(projectPath, filePath, eventType string, timesta
 }
 
 // InsertSessionEvent records an AI tool session event in the store.
-func (s *Store) InsertSessionEvent(sessionID, eventType, toolName, filePath, contentHash string, timestamp time.Time, rawJSON string) error {
+func (s *Store) InsertSessionEvent(sessionID, eventType, toolName, filePath, contentHash string, timestamp time.Time, rawJSON string, linesChanged int) error {
 	_, err := s.db.Exec(
-		`INSERT INTO session_events (session_id, event_type, tool_name, file_path, content_hash, timestamp, raw_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO session_events (session_id, event_type, tool_name, file_path, content_hash, timestamp, raw_json, lines_changed)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		sessionID, eventType, toolName, filePath, contentHash,
-		timestamp.UTC().Format(time.RFC3339Nano), rawJSON,
+		timestamp.UTC().Format(time.RFC3339Nano), rawJSON, linesChanged,
 	)
 	return err
 }
@@ -224,13 +224,14 @@ type FileEvent struct {
 
 // StoredSessionEvent represents a session event row from the store.
 type StoredSessionEvent struct {
-	ID          int64
-	SessionID   string
-	EventType   string
-	ToolName    string
-	FilePath    string
-	ContentHash string
-	Timestamp   time.Time
+	ID           int64
+	SessionID    string
+	EventType    string
+	ToolName     string
+	FilePath     string
+	ContentHash  string
+	Timestamp    time.Time
+	LinesChanged int
 }
 
 // AttributionRecord represents a row in the attributions table.
@@ -246,6 +247,7 @@ type AttributionRecord struct {
 	FirstAuthor         string
 	CorrelationWindowMs int
 	Timestamp           time.Time
+	LinesChanged        int
 }
 
 // ---------------------------------------------------------------------------
@@ -296,7 +298,7 @@ func (s *Store) QueryFileEventsByProject(projectPath string, since time.Time) ([
 // ordered by timestamp ascending.
 func (s *Store) QuerySessionEventsInWindow(filePath string, start, end time.Time) ([]StoredSessionEvent, error) {
 	rows, err := s.db.Query(
-		`SELECT id, session_id, event_type, tool_name, file_path, content_hash, timestamp
+		`SELECT id, session_id, event_type, tool_name, file_path, content_hash, timestamp, lines_changed
 		 FROM session_events
 		 WHERE file_path = ? AND tool_name IN ('Write', 'Edit') AND timestamp >= ? AND timestamp <= ?
 		 ORDER BY timestamp ASC`,
@@ -322,7 +324,7 @@ func (s *Store) QuerySessionEventsNearTimestamp(timestamp time.Time, windowMs in
 	end := timestamp.Add(windowDur)
 
 	rows, err := s.db.Query(
-		`SELECT id, session_id, event_type, tool_name, file_path, content_hash, timestamp
+		`SELECT id, session_id, event_type, tool_name, file_path, content_hash, timestamp, lines_changed
 		 FROM session_events
 		 WHERE tool_name IN ('Write', 'Edit') AND timestamp >= ? AND timestamp <= ?
 		 ORDER BY timestamp ASC`,
@@ -346,7 +348,7 @@ func (s *Store) QueryAnySessionEventsNearTimestamp(timestamp time.Time, windowMs
 	end := timestamp.Add(windowDur)
 
 	rows, err := s.db.Query(
-		`SELECT id, session_id, event_type, tool_name, file_path, content_hash, timestamp
+		`SELECT id, session_id, event_type, tool_name, file_path, content_hash, timestamp, lines_changed
 		 FROM session_events
 		 WHERE timestamp >= ? AND timestamp <= ?
 		 ORDER BY timestamp ASC`,
@@ -374,14 +376,15 @@ func (s *Store) InsertAttribution(attr AttributionRecord) (int64, error) {
 	result, err := s.db.Exec(
 		`INSERT INTO attributions
 		 (file_path, project_path, file_event_id, session_event_id, authorship_level,
-		  confidence, uncertain, first_author, correlation_window_ms, timestamp, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		  confidence, uncertain, first_author, correlation_window_ms, timestamp, created_at, lines_changed)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		attr.FilePath, attr.ProjectPath,
 		attr.FileEventID, attr.SessionEventID,
 		attr.AuthorshipLevel, attr.Confidence, uncertain,
 		attr.FirstAuthor, attr.CorrelationWindowMs,
 		attr.Timestamp.UTC().Format(time.RFC3339Nano),
 		time.Now().UTC().Format(time.RFC3339Nano),
+		attr.LinesChanged,
 	)
 	if err != nil {
 		return 0, err
@@ -395,7 +398,7 @@ func (s *Store) QueryAttributionsByFile(filePath string) ([]AttributionRecord, e
 	rows, err := s.db.Query(
 		`SELECT id, file_path, project_path, file_event_id, session_event_id,
 		        authorship_level, confidence, uncertain, first_author,
-		        correlation_window_ms, timestamp
+		        correlation_window_ms, timestamp, lines_changed
 		 FROM attributions
 		 WHERE file_path = ?
 		 ORDER BY timestamp ASC`,
@@ -415,7 +418,7 @@ func (s *Store) QueryLatestAttributionByFile(filePath string) (*AttributionRecor
 	rows, err := s.db.Query(
 		`SELECT id, file_path, project_path, file_event_id, session_event_id,
 		        authorship_level, confidence, uncertain, first_author,
-		        correlation_window_ms, timestamp
+		        correlation_window_ms, timestamp, lines_changed
 		 FROM attributions
 		 WHERE file_path = ?
 		 ORDER BY timestamp DESC
@@ -443,7 +446,7 @@ func (s *Store) QueryAttributionsByProject(projectPath string) ([]AttributionRec
 	rows, err := s.db.Query(
 		`SELECT id, file_path, project_path, file_event_id, session_event_id,
 		        authorship_level, confidence, uncertain, first_author,
-		        correlation_window_ms, timestamp
+		        correlation_window_ms, timestamp, lines_changed
 		 FROM attributions
 		 WHERE project_path = ?
 		 ORDER BY timestamp ASC`,
@@ -545,7 +548,7 @@ func (s *Store) QueryAttributionsWithWorkType(projectPath string) ([]Attribution
 	rows, err := s.db.Query(
 		`SELECT id, file_path, project_path, file_event_id, session_event_id,
 		        authorship_level, confidence, uncertain, first_author,
-		        correlation_window_ms, timestamp, work_type
+		        correlation_window_ms, timestamp, work_type, lines_changed
 		 FROM attributions
 		 WHERE project_path = ? AND work_type != ''
 		 ORDER BY timestamp ASC`,
@@ -565,7 +568,7 @@ func (s *Store) QueryAttributionsByFileWithWorkType(filePath string) ([]Attribut
 	rows, err := s.db.Query(
 		`SELECT id, file_path, project_path, file_event_id, session_event_id,
 		        authorship_level, confidence, uncertain, first_author,
-		        correlation_window_ms, timestamp, work_type
+		        correlation_window_ms, timestamp, work_type, lines_changed
 		 FROM attributions
 		 WHERE file_path = ? AND work_type != ''
 		 ORDER BY timestamp ASC`,
@@ -606,7 +609,7 @@ func scanSessionEvents(rows *sql.Rows) ([]StoredSessionEvent, error) {
 	for rows.Next() {
 		var se StoredSessionEvent
 		var ts string
-		if err := rows.Scan(&se.ID, &se.SessionID, &se.EventType, &se.ToolName, &se.FilePath, &se.ContentHash, &ts); err != nil {
+		if err := rows.Scan(&se.ID, &se.SessionID, &se.EventType, &se.ToolName, &se.FilePath, &se.ContentHash, &ts, &se.LinesChanged); err != nil {
 			return nil, err
 		}
 		t, err := time.Parse(time.RFC3339Nano, ts)
@@ -630,6 +633,7 @@ func scanAttributions(rows *sql.Rows) ([]AttributionRecord, error) {
 			&r.FileEventID, &r.SessionEventID,
 			&r.AuthorshipLevel, &r.Confidence, &uncertain,
 			&r.FirstAuthor, &r.CorrelationWindowMs, &ts,
+			&r.LinesChanged,
 		); err != nil {
 			return nil, err
 		}
@@ -678,11 +682,11 @@ func (s *Store) QuerySessionEventByID(id int64) (*StoredSessionEvent, error) {
 	var se StoredSessionEvent
 	var ts string
 	err := s.db.QueryRow(
-		`SELECT id, session_id, event_type, tool_name, file_path, content_hash, timestamp
+		`SELECT id, session_id, event_type, tool_name, file_path, content_hash, timestamp, lines_changed
 		 FROM session_events
 		 WHERE id = ?`,
 		id,
-	).Scan(&se.ID, &se.SessionID, &se.EventType, &se.ToolName, &se.FilePath, &se.ContentHash, &ts)
+	).Scan(&se.ID, &se.SessionID, &se.EventType, &se.ToolName, &se.FilePath, &se.ContentHash, &ts, &se.LinesChanged)
 	if err != nil {
 		return nil, err
 	}
@@ -692,6 +696,43 @@ func (s *Store) QuerySessionEventByID(id int64) (*StoredSessionEvent, error) {
 	}
 	se.Timestamp = t
 	return &se, nil
+}
+
+// QuerySessionEventRawJSON returns the raw_json column for a session event by ID.
+func (s *Store) QuerySessionEventRawJSON(id int64) (string, error) {
+	var rawJSON string
+	err := s.db.QueryRow(`SELECT raw_json FROM session_events WHERE id = ?`, id).Scan(&rawJSON)
+	return rawJSON, err
+}
+
+// QueryWriteEditSessionEvents returns all Write/Edit session events with their
+// file_path and raw_json. Used for line-level attribution against current files.
+func (s *Store) QueryWriteEditSessionEvents() ([]StoredSessionEvent, error) {
+	rows, err := s.db.Query(
+		`SELECT id, session_id, event_type, tool_name, file_path, content_hash, timestamp, lines_changed
+		 FROM session_events
+		 WHERE tool_name IN ('Write', 'Edit')
+		 ORDER BY timestamp ASC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanSessionEvents(rows)
+}
+
+// QueryEarliestAttributionTimestamp returns the earliest attribution timestamp
+// for a given file. Returns empty string if no attributions exist.
+func (s *Store) QueryEarliestAttributionTimestamp(filePath string) (string, error) {
+	var ts string
+	err := s.db.QueryRow(
+		`SELECT MIN(timestamp) FROM attributions WHERE file_path = ?`,
+		filePath,
+	).Scan(&ts)
+	if err != nil {
+		return "", err
+	}
+	return ts, nil
 }
 
 // InsertSurvivalRecord persists a code survival check result.
@@ -758,7 +799,7 @@ func scanAttributionsWithWorkType(rows *sql.Rows) ([]AttributionWithWorkType, er
 			&r.FileEventID, &r.SessionEventID,
 			&r.AuthorshipLevel, &r.Confidence, &uncertain,
 			&r.FirstAuthor, &r.CorrelationWindowMs, &ts,
-			&r.WorkType,
+			&r.WorkType, &r.LinesChanged,
 		); err != nil {
 			return nil, err
 		}

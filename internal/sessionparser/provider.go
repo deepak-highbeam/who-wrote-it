@@ -37,11 +37,13 @@ type SessionFile struct {
 
 // SessionEvent represents a parsed tool_use event from a session file.
 type SessionEvent struct {
-	SessionID   string    // Session that produced this event.
-	EventType   string    // "tool_use"
-	ToolName    string    // "Write", "Read", "Bash", etc.
-	FilePath    string    // File path affected (for Write/Read events).
-	ContentHash string    // SHA-256 hash of written content (for Write events).
-	Timestamp   time.Time // When the event occurred (or was parsed).
-	RawJSON     string    // Original JSON line for debugging/reprocessing.
+	SessionID    string    // Session that produced this event.
+	EventType    string    // "tool_use"
+	ToolName     string    // "Write", "Read", "Bash", etc.
+	FilePath     string    // File path affected (for Write/Read events).
+	ContentHash  string    // SHA-256 hash of written content (for Write events).
+	Timestamp    time.Time // When the event occurred (or was parsed).
+	RawJSON      string    // Original JSON line for debugging/reprocessing.
+	LinesChanged int       // Number of lines written/edited (0 for non-Write/Edit tools).
+	DiffContent  string    // Written/edited content for work type classification.
 }

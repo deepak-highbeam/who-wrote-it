@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -332,6 +333,7 @@ func (d *Daemon) startSessionTailer(ctx context.Context, sf sessionparser.Sessio
 				if err := d.store.InsertSessionEvent(
 					event.SessionID, event.EventType, event.ToolName,
 					event.FilePath, event.ContentHash, event.Timestamp, event.RawJSON,
+					event.LinesChanged,
 				); err != nil {
 					log.Printf("session store error: %v", err)
 				}
@@ -387,10 +389,34 @@ func (d *Daemon) startAttributionProcessor(ctx context.Context) {
 					}
 					attr := classifier.ClassifyWithHistory(*result, prior)
 
-					// Step 3: Classify work type (empty diff/commit -- path heuristics still work).
-					wt := wtClassifier.ClassifyFile(attr.FilePath, "", "")
+					// Step 3: Extract diff content and lines_changed from matched session event.
+					var diffContent string
+					var linesChanged int
+					if result.MatchedSession != nil {
+						// Get lines_changed from the matched session event.
+						if seDetails, err := d.store.QuerySessionEventByID(result.MatchedSession.ID); err == nil {
+							linesChanged = seDetails.LinesChanged
+						}
+						// Extract diff content from raw JSON for work type classification.
+						if rawJSON, err := d.store.QuerySessionEventRawJSON(result.MatchedSession.ID); err == nil {
+							diffContent = sessionparser.ExtractDiffContent(rawJSON)
+						}
+					}
+					if linesChanged == 0 && diffContent != "" {
+						// Compute from content (handles pre-v5 session events).
+						linesChanged = strings.Count(diffContent, "\n")
+						if !strings.HasSuffix(diffContent, "\n") {
+							linesChanged++
+						}
+					}
+					if linesChanged == 0 {
+						linesChanged = 1 // conservative default when no content available
+					}
 
-					// Step 4: Build store record and persist.
+					// Step 4: Classify work type with actual content.
+					wt := wtClassifier.ClassifyFile(attr.FilePath, diffContent, "")
+
+					// Step 5: Build store record and persist.
 					record := store.AttributionRecord{
 						FilePath:            attr.FilePath,
 						ProjectPath:         attr.ProjectPath,
@@ -402,6 +428,7 @@ func (d *Daemon) startAttributionProcessor(ctx context.Context) {
 						FirstAuthor:         attr.FirstAuthor,
 						CorrelationWindowMs: attr.CorrelationWindowMs,
 						Timestamp:           attr.Timestamp,
+						LinesChanged:        linesChanged,
 					}
 
 					id, err := d.store.InsertAttribution(record)
@@ -410,7 +437,7 @@ func (d *Daemon) startAttributionProcessor(ctx context.Context) {
 						continue
 					}
 
-					// Step 5: Set work type on the attribution record.
+					// Step 6: Set work type on the attribution record.
 					if id > 0 {
 						if err := d.store.UpdateAttributionWorkType(id, string(wt)); err != nil {
 							log.Printf("attribution: update work type error for %s: %v", fe.FilePath, err)

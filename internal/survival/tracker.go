@@ -27,7 +27,9 @@ type SurvivalBreakdown struct {
 }
 
 // aiAuthorshipLevels defines which authorship levels are considered AI-authored.
+// Includes both new 3-level names and legacy 5-level names for backward compat.
 var aiAuthorshipLevels = map[string]bool{
+	"mostly_ai":              true,
 	"fully_ai":               true,
 	"ai_first_human_revised": true,
 }

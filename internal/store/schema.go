@@ -1,7 +1,7 @@
 package store
 
 // schemaVersion is the current schema version. Increment when adding migrations.
-const schemaVersion = 4
+const schemaVersion = 5
 
 // migrations maps version numbers to SQL statements that bring the schema
 // from (version-1) to (version). Version 1 is the initial schema.
@@ -140,5 +140,11 @@ CREATE TABLE IF NOT EXISTS code_survival (
 CREATE INDEX IF NOT EXISTS idx_code_survival_project ON code_survival(project_path);
 CREATE INDEX IF NOT EXISTS idx_code_survival_file ON code_survival(file_path);
 CREATE INDEX IF NOT EXISTS idx_code_survival_attribution ON code_survival(attribution_id);
+`,
+
+	5: `
+-- Add line count tracking to session events and attributions.
+ALTER TABLE session_events ADD COLUMN lines_changed INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE attributions ADD COLUMN lines_changed INTEGER NOT NULL DEFAULT 0;
 `,
 }

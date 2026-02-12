@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -33,6 +34,63 @@ func TestParseLineWrite(t *testing.T) {
 	if event.EventType != "tool_use" {
 		t.Errorf("EventType = %q, want %q", event.EventType, "tool_use")
 	}
+	// Write with 2 lines of content.
+	if event.LinesChanged != 2 {
+		t.Errorf("LinesChanged = %d, want 2", event.LinesChanged)
+	}
+	if event.DiffContent != "package main\nfunc main() {}\n" {
+		t.Errorf("DiffContent = %q, want full content", event.DiffContent)
+	}
+}
+
+func TestParseLineWrite_LinesChanged(t *testing.T) {
+	p := NewClaudeCodeParser("", 24*time.Hour)
+
+	// Content with 4 lines.
+	line := []byte(`{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/tmp/multi.go","content":"line1\nline2\nline3\nline4"}}]}}`)
+
+	event, err := p.ParseLine(line)
+	if err != nil {
+		t.Fatalf("ParseLine: %v", err)
+	}
+	if event == nil {
+		t.Fatal("expected event, got nil")
+	}
+
+	if event.LinesChanged != 4 {
+		t.Errorf("LinesChanged = %d, want 4", event.LinesChanged)
+	}
+}
+
+func TestParseLineEdit(t *testing.T) {
+	p := NewClaudeCodeParser("", 24*time.Hour)
+
+	line := []byte(`{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/tmp/edit.go","old_string":"old line","new_string":"new line 1\nnew line 2\nnew line 3"}}]}}`)
+
+	event, err := p.ParseLine(line)
+	if err != nil {
+		t.Fatalf("ParseLine: %v", err)
+	}
+	if event == nil {
+		t.Fatal("expected event, got nil")
+	}
+
+	if event.ToolName != "Edit" {
+		t.Errorf("ToolName = %q, want %q", event.ToolName, "Edit")
+	}
+	if event.FilePath != "/tmp/edit.go" {
+		t.Errorf("FilePath = %q, want %q", event.FilePath, "/tmp/edit.go")
+	}
+	// Edit new_string has 3 lines.
+	if event.LinesChanged != 3 {
+		t.Errorf("LinesChanged = %d, want 3", event.LinesChanged)
+	}
+	if event.DiffContent != "new line 1\nnew line 2\nnew line 3" {
+		t.Errorf("DiffContent = %q, want new_string content", event.DiffContent)
+	}
+	if event.ContentHash == "" {
+		t.Error("ContentHash is empty, want hash of new_string")
+	}
 }
 
 func TestParseLineRead(t *testing.T) {
@@ -52,6 +110,10 @@ func TestParseLineRead(t *testing.T) {
 	}
 	if event.FilePath != "/tmp/readme.md" {
 		t.Errorf("FilePath = %q, want %q", event.FilePath, "/tmp/readme.md")
+	}
+	// Read events should have no lines changed.
+	if event.LinesChanged != 0 {
+		t.Errorf("LinesChanged = %d, want 0 for Read", event.LinesChanged)
 	}
 }
 
@@ -129,6 +191,9 @@ func TestParseLineMissingFields(t *testing.T) {
 	}
 	if event.FilePath != "/tmp/test.go" {
 		t.Errorf("FilePath = %q, want %q", event.FilePath, "/tmp/test.go")
+	}
+	if event.LinesChanged != 0 {
+		t.Errorf("LinesChanged = %d, want 0 for empty content", event.LinesChanged)
 	}
 }
 
@@ -306,4 +371,138 @@ done:
 	}
 
 	cancel()
+}
+
+// ---------------------------------------------------------------------------
+// ExtractDiffContent tests
+// ---------------------------------------------------------------------------
+
+func TestExtractDiffContent_WriteEvent(t *testing.T) {
+	rawJSON := `{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"/tmp/test.go","content":"package main\nfunc main() {}\n"}}]}}`
+
+	content := ExtractDiffContent(rawJSON)
+	if content != "package main\nfunc main() {}\n" {
+		t.Errorf("ExtractDiffContent(Write) = %q, want content", content)
+	}
+}
+
+func TestExtractDiffContent_EditEvent(t *testing.T) {
+	rawJSON := `{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/tmp/test.go","old_string":"old","new_string":"new line 1\nnew line 2"}}]}}`
+
+	content := ExtractDiffContent(rawJSON)
+	if content != "new line 1\nnew line 2" {
+		t.Errorf("ExtractDiffContent(Edit) = %q, want new_string", content)
+	}
+}
+
+func TestExtractDiffContent_EditStripsContextLines(t *testing.T) {
+	// Edit where new_string contains context lines from old_string.
+	// Only genuinely new lines should be returned.
+	rawJSON := `{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"/tmp/test.kt","old_string":"  ) : RestEndpoint<Nothing, Rep>()\n\n  @Method(\"GET\")\n  @Path(\"/items\")\n  data class Search(","new_string":"  ) : RestEndpoint<Nothing, Rep>()\n\n  @Method(\"GET\")\n  @Path(\"/items/:id/details\")\n  data class GetDetails(\n    @PathParam val id: KairoId,\n  ) : RestEndpoint<Nothing, Rep>()\n\n  @Method(\"GET\")\n  @Path(\"/items\")\n  data class Search("}}]}}`
+
+	content := ExtractDiffContent(rawJSON)
+
+	// Should only contain the new lines, not the context lines that existed in old_string.
+	if strings.Contains(content, "data class Search(") {
+		t.Errorf("ExtractDiffContent(Edit) should not include context line 'data class Search(', got %q", content)
+	}
+	if !strings.Contains(content, "@Path(\"/items/:id/details\")") {
+		t.Errorf("ExtractDiffContent(Edit) should include new line '@Path(\"/items/:id/details\")', got %q", content)
+	}
+	if !strings.Contains(content, "data class GetDetails(") {
+		t.Errorf("ExtractDiffContent(Edit) should include new line 'data class GetDetails(', got %q", content)
+	}
+	if !strings.Contains(content, "@PathParam val id: KairoId,") {
+		t.Errorf("ExtractDiffContent(Edit) should include new line '@PathParam val id: KairoId,', got %q", content)
+	}
+}
+
+func TestEditOnlyNewLines(t *testing.T) {
+	tests := []struct {
+		name   string
+		old    string
+		new    string
+		want   string
+	}{
+		{
+			name: "empty old returns full new",
+			old:  "",
+			new:  "line1\nline2",
+			want: "line1\nline2",
+		},
+		{
+			name: "no overlap returns full new",
+			old:  "old1\nold2",
+			new:  "new1\nnew2",
+			want: "new1\nnew2",
+		},
+		{
+			name: "full overlap returns empty",
+			old:  "same1\nsame2",
+			new:  "same1\nsame2",
+			want: "",
+		},
+		{
+			name: "partial overlap strips context",
+			old:  "context1\ncontext2",
+			new:  "context1\nnew line\ncontext2",
+			want: "new line",
+		},
+		{
+			name: "duplicate lines consumed correctly",
+			old:  "dup\ndup",
+			new:  "dup\nnew\ndup\ndup",
+			want: "new\ndup",
+		},
+		{
+			name: "indentation differences still match",
+			old:  "  indented",
+			new:  "    indented\nnew line",
+			want: "new line",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := editOnlyNewLines(tt.old, tt.new)
+			if got != tt.want {
+				t.Errorf("editOnlyNewLines(%q, %q) = %q, want %q", tt.old, tt.new, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExtractDiffContent_NonWriteEvent(t *testing.T) {
+	rawJSON := `{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/tmp/test.go"}}]}}`
+
+	content := ExtractDiffContent(rawJSON)
+	if content != "" {
+		t.Errorf("ExtractDiffContent(Read) = %q, want empty", content)
+	}
+}
+
+func TestExtractDiffContent_EmptyInput(t *testing.T) {
+	content := ExtractDiffContent("")
+	if content != "" {
+		t.Errorf("ExtractDiffContent('') = %q, want empty", content)
+	}
+}
+
+func TestCountLines(t *testing.T) {
+	tests := []struct {
+		input string
+		want  int
+	}{
+		{"", 0},
+		{"single line", 1},
+		{"line1\nline2", 2},
+		{"line1\nline2\nline3", 3},
+		{"line1\nline2\n", 2},
+	}
+
+	for _, tt := range tests {
+		got := countLines(tt.input)
+		if got != tt.want {
+			t.Errorf("countLines(%q) = %d, want %d", tt.input, got, tt.want)
+		}
+	}
 }
