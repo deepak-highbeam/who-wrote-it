@@ -1,16 +1,30 @@
 # who-wrote-it
 
-An always-on Go daemon that monitors how code gets written in real-time, attributing contributions not just by authorship (human vs AI) but by **type of work** — architecture decisions, core logic, boilerplate, bug fixes, edge case handling, test scaffolding.
+A learning tool for engineers who use AI. It runs in the background while you code, tracks what the AI wrote vs. what you wrote, and classifies it by **type of work** — architecture, core logic, boilerplate, bug fixes, edge cases, tests. The result is a map of your knowledge gaps: where you leaned on AI, what you're avoiding, and what you need to go back and actually learn.
 
-Generates CLI reports, GitHub PR collaboration summaries, and code survival analytics showing how AI-written code persists over time.
+Also generates CLI reports, GitHub PR collaboration summaries, and code survival analytics.
 
 > **Disclaimer:** This project was vibe coded on [Claude Code](https://claude.com/claude-code) with [Get Shit Done](https://github.com/gsd-build/get-shit-done). Use at your own risk.
 
 ## Why
 
-Line counts are vanity metrics. Knowing "AI wrote 60% of the code" tells you nothing useful. What matters is **what kind of work** the AI is doing.
+AI makes it easy to gloss over the stuff you don't know. You ship working code without ever building a mental model of *why* it works. The struggle of figuring things out yourself — that's where comprehension actually forms. AI removes that struggle, and you don't even notice the gap.
 
-who-wrote-it answers questions like:
+**who-wrote-it is a mirror.** It shows you where you leaned on AI and what kind of work you offloaded. When you're learning a new language or framework — TypeScript, React, Go, whatever — it maps your knowledge gaps so you can go back and fill them.
+
+### What it actually tells you
+
+- **Where your blind spots are** — files classified as `mostly_ai` + `core_logic` are things you shipped but might not be able to debug, extend, or explain in a review
+- **What you're avoiding** — if `edge_case` handling or error boundaries are always AI-written, you're not building intuition for failure modes in that language
+- **What you think you know but don't** — `mostly_ai` files with high survival rates are deceptively comfortable. The code works, it stuck around, so you never went back to understand it. The blind spot persists.
+- **Whether AI is doing the hard work or the easy work** — if your "Meaningful AI %" is much lower than "Raw AI %", AI is mostly generating boilerplate while you handle the architecture. If they're close, AI is making the decisions too.
+
+### The honest move
+
+After a sprint, look at your `mostly_ai` files. Pick one. Delete the AI's version. Rewrite it yourself. You already know what it *should* do — now force yourself through the *how*.
+
+### It also answers
+
 - Is AI writing the architecture, or just the boilerplate?
 - Does AI-written core logic survive, or does it get rewritten?
 - How does human-AI collaboration actually flow on this PR?
