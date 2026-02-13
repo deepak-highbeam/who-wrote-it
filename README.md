@@ -4,7 +4,7 @@ An always-on Go daemon that monitors how code gets written in real-time, attribu
 
 Generates CLI reports, GitHub PR collaboration summaries, and code survival analytics showing how AI-written code persists over time.
 
-> **Disclaimer:** This project was vibe coded on [Claude Code](https://claude.com/claude-code) with [Get Shit Done](https://github.com/gsd-build/get-shit-done). The developer doesn't know Go and had to babysit a lot of edge cases over a couple of days — might have been faster to just write it himself. Use at your own risk.
+> **Disclaimer:** This project was vibe coded on [Claude Code](https://claude.com/claude-code) with [Get Shit Done](https://github.com/gsd-build/get-shit-done). Use at your own risk.
 
 ## Why
 
