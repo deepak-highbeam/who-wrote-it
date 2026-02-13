@@ -220,6 +220,7 @@ type FileEvent struct {
 	FilePath    string
 	EventType   string
 	Timestamp   time.Time
+	Branch      string
 }
 
 // StoredSessionEvent represents a session event row from the store.
@@ -232,6 +233,7 @@ type StoredSessionEvent struct {
 	ContentHash  string
 	Timestamp    time.Time
 	LinesChanged int
+	Branch       string
 }
 
 // AttributionRecord represents a row in the attributions table.
@@ -248,6 +250,7 @@ type AttributionRecord struct {
 	CorrelationWindowMs int
 	Timestamp           time.Time
 	LinesChanged        int
+	Branch              string
 }
 
 // ---------------------------------------------------------------------------
@@ -376,8 +379,8 @@ func (s *Store) InsertAttribution(attr AttributionRecord) (int64, error) {
 	result, err := s.db.Exec(
 		`INSERT INTO attributions
 		 (file_path, project_path, file_event_id, session_event_id, authorship_level,
-		  confidence, uncertain, first_author, correlation_window_ms, timestamp, created_at, lines_changed)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		  confidence, uncertain, first_author, correlation_window_ms, timestamp, created_at, lines_changed, branch)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		attr.FilePath, attr.ProjectPath,
 		attr.FileEventID, attr.SessionEventID,
 		attr.AuthorshipLevel, attr.Confidence, uncertain,
@@ -385,6 +388,7 @@ func (s *Store) InsertAttribution(attr AttributionRecord) (int64, error) {
 		attr.Timestamp.UTC().Format(time.RFC3339Nano),
 		time.Now().UTC().Format(time.RFC3339Nano),
 		attr.LinesChanged,
+		attr.Branch,
 	)
 	if err != nil {
 		return 0, err

@@ -251,6 +251,8 @@ func analyzeCmd() *cobra.Command {
 		filePath   string
 		jsonOutput bool
 		dbPath     string
+		branch     string
+		baseBranch string
 	)
 
 	cmd := &cobra.Command{
@@ -259,7 +261,11 @@ func analyzeCmd() *cobra.Command {
 		Long: `Analyze collected attribution data and display a report.
 
 Reads the SQLite database directly -- the daemon does not need to be running.
-By default, shows a project-level summary. Use --file for single-file detail.`,
+By default, shows a project-level summary. Use --file for single-file detail.
+
+Use --branch and --base to scope the report to a specific branch's changes
+relative to a base branch (e.g. main). This uses git merge-base to compute
+only the lines that changed on the branch.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Resolve DB path: flag > config default.
 			if dbPath == "" {
@@ -268,6 +274,10 @@ By default, shows a project-level summary. Use --file for single-file detail.`,
 					return fmt.Errorf("load config: %w", err)
 				}
 				dbPath = cfg.DBPath
+			}
+
+			if branch != "" && baseBranch == "" {
+				baseBranch = "main"
 			}
 
 			if filePath != "" {
@@ -280,6 +290,23 @@ By default, shows a project-level summary. Use --file for single-file detail.`,
 					fmt.Println(report.FormatJSON(fr))
 				} else {
 					fmt.Print(report.FormatFileReport(fr))
+				}
+			} else if branch != "" {
+				// Branch-scoped analysis.
+				s, err := store.New(dbPath)
+				if err != nil {
+					return fmt.Errorf("open store: %w", err)
+				}
+				defer s.Close()
+
+				pr, err := report.GenerateProjectForBranch(s, branch, baseBranch)
+				if err != nil {
+					return fmt.Errorf("generate branch report: %w", err)
+				}
+				if jsonOutput {
+					fmt.Println(report.FormatJSON(pr))
+				} else {
+					fmt.Print(report.FormatProjectReport(pr))
 				}
 			} else {
 				// Full project analysis.
@@ -301,6 +328,8 @@ By default, shows a project-level summary. Use --file for single-file detail.`,
 	cmd.Flags().StringVar(&filePath, "file", "", "Analyze a single file")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output as JSON")
 	cmd.Flags().StringVar(&dbPath, "db", "", "Override database path (default: from config)")
+	cmd.Flags().StringVar(&branch, "branch", "", "Scope report to a specific branch")
+	cmd.Flags().StringVar(&baseBranch, "base", "", "Base branch for comparison (default: main)")
 
 	return cmd
 }

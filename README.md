@@ -84,6 +84,22 @@ go build -o whowroteit ./cmd/whowroteit
 
 Requires Go 1.25+. Pure Go build — no CGO required.
 
+## Prerequisites
+
+who-wrote-it shells out to external CLI tools at runtime:
+
+| Tool | Required | Used For |
+|------|----------|----------|
+| **[git](https://git-scm.com/)** | Yes | Diff computation, blame, commit history, merge-base resolution, branch detection |
+| **[gh](https://cli.github.com/)** | Only for `pr-comment` | Auto-detecting PR number from current branch when posting GitHub PR comments |
+
+Verify they're installed:
+
+```bash
+git --version   # any recent version works
+gh --version    # only needed if you use `whowroteit pr-comment`
+```
+
 ## Quick Start
 
 ```bash
@@ -209,6 +225,22 @@ Currently supports **Claude Code** via the SessionProvider interface. The archit
 ## Privacy
 
 All data stays local. No telemetry, no cloud, no external API calls (except GitHub PR comments when you explicitly request them). The SQLite database lives in `~/.whowroteit/`.
+
+## Known Limitations
+
+### Linter/formatter attribution
+
+When an AI writes code and an automated formatter (`gofmt`, `prettier`, `eslint --fix`) modifies it afterward, some lines may shift from AI to human attribution. The tool uses `strings.TrimSpace` before hashing, so **indentation changes and import reordering are handled correctly** (still attributed to AI). However, content-altering changes like operator spacing (`x:=1` → `x := 1`) or line splitting (single-line if → multi-line block) produce different hashes and are attributed to the linter/human.
+
+In practice, modern LLMs write well-formatted code that linters rarely touch substantially. See `internal/metrics/linecalc_linter_test.go` for detailed test cases.
+
+### Claude Code session format
+
+The Claude Code JSONL session log format has no stability contract. Updates to Claude Code could change the structure, which would require updating the session parser.
+
+### Single AI tool support
+
+Currently only supports Claude Code. Other AI coding tools (Copilot, Cursor, Codeium) would need their own SessionProvider implementation.
 
 ## License
 
