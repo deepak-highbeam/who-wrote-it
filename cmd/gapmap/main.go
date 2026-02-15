@@ -13,20 +13,20 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/anthropic/who-wrote-it/internal/config"
-	"github.com/anthropic/who-wrote-it/internal/daemon"
-	ghub "github.com/anthropic/who-wrote-it/internal/github"
-	"github.com/anthropic/who-wrote-it/internal/ipc"
-	"github.com/anthropic/who-wrote-it/internal/report"
-	"github.com/anthropic/who-wrote-it/internal/store"
-	"github.com/anthropic/who-wrote-it/internal/survival"
+	"github.com/anthropic/gap-map/internal/config"
+	"github.com/anthropic/gap-map/internal/daemon"
+	ghub "github.com/anthropic/gap-map/internal/github"
+	"github.com/anthropic/gap-map/internal/ipc"
+	"github.com/anthropic/gap-map/internal/report"
+	"github.com/anthropic/gap-map/internal/store"
+	"github.com/anthropic/gap-map/internal/survival"
 )
 
 func main() {
 	rootCmd := &cobra.Command{
-		Use:   "whowroteit",
+		Use:   "gapmap",
 		Short: "Track human vs AI code authorship",
-		Long:  "who-wrote-it is a daemon that monitors your development workflow to attribute code to human or AI authors.",
+		Long:  "gap-map is a daemon that monitors your development workflow to attribute code to human or AI authors.",
 	}
 
 	rootCmd.AddCommand(startCmd())
@@ -47,14 +47,14 @@ func startCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "start",
-		Short: "Start the who-wrote-it daemon",
+		Short: "Start the gap-map daemon",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load(config.ConfigPath())
 			if err != nil {
 				return fmt.Errorf("load config: %w", err)
 			}
 
-			pidPath := filepath.Join(cfg.DataDir, "whowroteit.pid")
+			pidPath := filepath.Join(cfg.DataDir, "gapmap.pid")
 
 			// The already-running checks only apply to the user-facing
 			// entry point (non-foreground). The foreground child skips
@@ -171,7 +171,7 @@ func startCmd() *cobra.Command {
 func stopCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "stop",
-		Short: "Stop the who-wrote-it daemon",
+		Short: "Stop the gap-map daemon",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load(config.ConfigPath())
 			if err != nil {
@@ -184,7 +184,7 @@ func stopCmd() *cobra.Command {
 			}
 
 			// Remove PID file in case daemon crashes before its own cleanup.
-			_ = os.Remove(filepath.Join(cfg.DataDir, "whowroteit.pid"))
+			_ = os.Remove(filepath.Join(cfg.DataDir, "gapmap.pid"))
 
 			fmt.Println("daemon stopping")
 			return nil
@@ -534,14 +534,14 @@ func printBanner() {
 	const reset = "\033[0m"
 
 	fmt.Print(purple + bold + `
-              _                                    _             _    ___
-  __      __ | |__    ___    __      __ _ __  ___ | |_  ___   (_) |_ |__ \
-  \ \ /\ / / | '_ \  / _ \   \ \ /\ / /| '__|/ _ \| __|/ _ \  | | __|   ) |
-   \ V  V /  | | | || (_) |   \ V  V / | |  | (_) | |_|  __/  | | |_   / /
-    \_/\_/   |_| |_| \___/     \_/\_/  |_|   \___/ \__|\___/  |_|\__| /_/
-                                                                      (_)
+
+   __ _   __ _  _ __   _ __ ___    __ _  _ __
+  / _` + "`" + ` | / _` + "`" + ` || '_ \ | '_ ` + "`" + ` _ \  / _` + "`" + ` || '_ \
+ | (_| || (_| || |_) || | | | | || (_| || |_) |
+  \__, | \__,_|| .__/ |_| |_| |_| \__,_|| .__/
+  |___/        |_|                       |_|
 ` + reset + dim + `
-    Track human vs AI code authorship
+    Map your knowledge gaps
 ` + reset + "\n")
 }
 

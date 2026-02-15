@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anthropic/who-wrote-it/internal/metrics"
-	"github.com/anthropic/who-wrote-it/internal/sessionparser"
-	"github.com/anthropic/who-wrote-it/internal/store"
-	"github.com/anthropic/who-wrote-it/internal/worktype"
+	"github.com/anthropic/gap-map/internal/metrics"
+	"github.com/anthropic/gap-map/internal/sessionparser"
+	"github.com/anthropic/gap-map/internal/store"
+	"github.com/anthropic/gap-map/internal/worktype"
 )
 
 // ProjectReport holds the full project attribution report data.

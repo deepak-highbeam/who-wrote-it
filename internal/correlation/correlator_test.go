@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anthropic/who-wrote-it/internal/store"
+	"github.com/anthropic/gap-map/internal/store"
 )
 
 // ---------------------------------------------------------------------------

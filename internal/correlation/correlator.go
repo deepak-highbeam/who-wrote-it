@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anthropic/who-wrote-it/internal/authorship"
-	"github.com/anthropic/who-wrote-it/internal/store"
+	"github.com/anthropic/gap-map/internal/authorship"
+	"github.com/anthropic/gap-map/internal/store"
 )
 
 // DefaultWindowMs is the default correlation window in milliseconds.

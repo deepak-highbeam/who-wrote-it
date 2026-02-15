@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anthropic/who-wrote-it/internal/authorship"
-	"github.com/anthropic/who-wrote-it/internal/correlation"
-	"github.com/anthropic/who-wrote-it/internal/store"
-	"github.com/anthropic/who-wrote-it/internal/worktype"
+	"github.com/anthropic/gap-map/internal/authorship"
+	"github.com/anthropic/gap-map/internal/correlation"
+	"github.com/anthropic/gap-map/internal/store"
+	"github.com/anthropic/gap-map/internal/worktype"
 )
 
 // TestAttributionPipeline exercises the full attribution pipeline end-to-end:

@@ -1,5 +1,5 @@
-# Binaries (root-level only, not cmd/whowroteit/ directory)
-/whowroteit
+# Binaries (root-level only, not cmd/gapmap/ directory)
+/gapmap
 *.exe
 *.dll
 *.so
@@ -20,5 +20,7 @@
 # OS
 .DS_Store
 
+
+.claude/
 # Data directory (created at runtime)
-# ~/.whowroteit/
+# ~/.gapmap/

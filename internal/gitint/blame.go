@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-git/go-git/v5"
 
-	"github.com/anthropic/who-wrote-it/internal/store"
+	"github.com/anthropic/gap-map/internal/store"
 )
 
 // BlameFile runs git blame on a single file and returns per-line authorship.

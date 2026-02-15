@@ -10,7 +10,7 @@ import (
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 
-	"github.com/anthropic/who-wrote-it/internal/store"
+	"github.com/anthropic/gap-map/internal/store"
 )
 
 // --- Co-Author Detection Tests ---

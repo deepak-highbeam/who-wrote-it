@@ -16,13 +16,13 @@ type Config struct {
 	IgnorePatterns []string `json:"ignore_patterns"`
 }
 
-// DefaultDataDir returns the default data directory (~/.whowroteit).
+// DefaultDataDir returns the default data directory (~/.gapmap).
 func DefaultDataDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = "."
 	}
-	return filepath.Join(home, ".whowroteit")
+	return filepath.Join(home, ".gapmap")
 }
 
 // Default returns a Config with sensible defaults.
@@ -30,8 +30,8 @@ func Default() *Config {
 	dataDir := DefaultDataDir()
 	return &Config{
 		DataDir:    dataDir,
-		SocketPath: filepath.Join(dataDir, "whowroteit.sock"),
-		DBPath:     filepath.Join(dataDir, "whowroteit.db"),
+		SocketPath: filepath.Join(dataDir, "gapmap.sock"),
+		DBPath:     filepath.Join(dataDir, "gapmap.db"),
 		WatchPaths: []string{},
 		IgnorePatterns: []string{
 			".git",
@@ -72,10 +72,10 @@ func Load(path string) (*Config, error) {
 
 	// Re-derive paths if DataDir was overridden but socket/db paths were not.
 	if cfg.SocketPath == "" {
-		cfg.SocketPath = filepath.Join(cfg.DataDir, "whowroteit.sock")
+		cfg.SocketPath = filepath.Join(cfg.DataDir, "gapmap.sock")
 	}
 	if cfg.DBPath == "" {
-		cfg.DBPath = filepath.Join(cfg.DataDir, "whowroteit.db")
+		cfg.DBPath = filepath.Join(cfg.DataDir, "gapmap.db")
 	}
 
 	return cfg, nil

@@ -11,14 +11,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anthropic/who-wrote-it/internal/authorship"
-	"github.com/anthropic/who-wrote-it/internal/config"
-	"github.com/anthropic/who-wrote-it/internal/correlation"
-	"github.com/anthropic/who-wrote-it/internal/gitint"
-	"github.com/anthropic/who-wrote-it/internal/sessionparser"
-	"github.com/anthropic/who-wrote-it/internal/store"
-	"github.com/anthropic/who-wrote-it/internal/watcher"
-	"github.com/anthropic/who-wrote-it/internal/worktype"
+	"github.com/anthropic/gap-map/internal/authorship"
+	"github.com/anthropic/gap-map/internal/config"
+	"github.com/anthropic/gap-map/internal/correlation"
+	"github.com/anthropic/gap-map/internal/gitint"
+	"github.com/anthropic/gap-map/internal/sessionparser"
+	"github.com/anthropic/gap-map/internal/store"
+	"github.com/anthropic/gap-map/internal/watcher"
+	"github.com/anthropic/gap-map/internal/worktype"
 )
 
 // IPCServer is the interface the daemon uses to start/stop the IPC listener.
@@ -33,7 +33,7 @@ type StoreAware interface {
 	SetStore(store interface{})
 }
 
-// Daemon manages the lifecycle of the who-wrote-it background process.
+// Daemon manages the lifecycle of the gap-map background process.
 type Daemon struct {
 	cfg       *config.Config
 	store     *store.Store
@@ -260,7 +260,7 @@ func (d *Daemon) shutdown() error {
 	_ = os.Remove(d.cfg.SocketPath)
 
 	// Remove PID file.
-	_ = os.Remove(filepath.Join(d.cfg.DataDir, "whowroteit.pid"))
+	_ = os.Remove(filepath.Join(d.cfg.DataDir, "gapmap.pid"))
 
 	d.mu.Lock()
 	d.running = false

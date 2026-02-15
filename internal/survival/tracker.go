@@ -6,7 +6,7 @@ package survival
 import (
 	"fmt"
 
-	"github.com/anthropic/who-wrote-it/internal/store"
+	"github.com/anthropic/gap-map/internal/store"
 )
 
 // SurvivalReport holds the results of a code survival analysis.

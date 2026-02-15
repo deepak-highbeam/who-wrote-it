@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anthropic/who-wrote-it/internal/store"
+	"github.com/anthropic/gap-map/internal/store"
 )
 
 // AuthorshipLevel represents one of three levels on the authorship spectrum.

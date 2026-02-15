@@ -8,9 +8,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/anthropic/who-wrote-it/internal/gitint"
-	"github.com/anthropic/who-wrote-it/internal/metrics"
-	"github.com/anthropic/who-wrote-it/internal/store"
+	"github.com/anthropic/gap-map/internal/gitint"
+	"github.com/anthropic/gap-map/internal/metrics"
+	"github.com/anthropic/gap-map/internal/store"
 )
 
 // GenerateProjectForBranch produces a project report scoped to a specific branch,

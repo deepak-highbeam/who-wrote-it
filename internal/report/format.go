@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/anthropic/who-wrote-it/internal/ipc"
+	"github.com/anthropic/gap-map/internal/ipc"
 )
 
 // ANSI escape codes for terminal formatting.
@@ -19,7 +19,7 @@ func FormatProjectReport(r *ProjectReport) string {
 	var b strings.Builder
 
 	// Header.
-	b.WriteString(bold + "Who Wrote It - Attribution Report" + reset + "\n")
+	b.WriteString(bold + "Gap Map - Attribution Report" + reset + "\n")
 	b.WriteString(strings.Repeat("=", 40) + "\n\n")
 
 	// Headline metric.
@@ -109,7 +109,7 @@ func FormatProjectReport(r *ProjectReport) string {
 func FormatFileReport(r *FileReport) string {
 	var b strings.Builder
 
-	b.WriteString(bold + "Who Wrote It - File Report" + reset + "\n")
+	b.WriteString(bold + "Gap Map - File Report" + reset + "\n")
 	b.WriteString(strings.Repeat("=", 40) + "\n\n")
 
 	b.WriteString(fmt.Sprintf("File:      %s\n", r.FilePath))
@@ -145,7 +145,7 @@ func FormatFileReport(r *FileReport) string {
 func FormatStatus(status *ipc.StatusData) string {
 	var b strings.Builder
 
-	b.WriteString(bold + "Who Wrote It - Daemon Status" + reset + "\n")
+	b.WriteString(bold + "Gap Map - Daemon Status" + reset + "\n")
 	b.WriteString(strings.Repeat("=", 40) + "\n\n")
 
 	b.WriteString(fmt.Sprintf("%-20s %s\n", "Uptime:", status.Uptime))

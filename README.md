@@ -1,4 +1,4 @@
-# who-wrote-it
+# gap-map
 
 A learning tool for engineers who use AI. It runs in the background while you code, tracks what the AI wrote vs. what you wrote, and classifies it by **type of work** — architecture, core logic, boilerplate, bug fixes, edge cases, tests. The result is a map of your knowledge gaps: where you leaned on AI, what you're avoiding, and what you need to go back and actually learn.
 
@@ -10,7 +10,7 @@ Also generates CLI reports, GitHub PR collaboration summaries, and code survival
 
 AI makes it easy to gloss over the stuff you don't know. You ship working code without ever building a mental model of *why* it works. The struggle of figuring things out yourself — that's where comprehension actually forms. AI removes that struggle, and you don't even notice the gap.
 
-**who-wrote-it is a mirror.** It shows you where you leaned on AI and what kind of work you offloaded. When you're learning a new language or framework — TypeScript, React, Go, whatever — it maps your knowledge gaps so you can go back and fill them.
+**gap-map is a mirror.** It shows you where you leaned on AI and what kind of work you offloaded. When you're learning a new language or framework — TypeScript, React, Go, whatever — it maps your knowledge gaps so you can go back and fill them.
 
 ### What it actually tells you
 
@@ -85,22 +85,22 @@ Meaningful AI % = Σ(AI_lines × weight) / Σ(total_changed_lines × weight) × 
 ## Install
 
 ```bash
-go install github.com/anthropic/who-wrote-it/cmd/whowroteit@latest
+go install github.com/anthropic/gap-map/cmd/gapmap@latest
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/anthropic/who-wrote-it.git
-cd who-wrote-it
-go build -o whowroteit ./cmd/whowroteit
+git clone https://github.com/anthropic/gap-map.git
+cd gap-map
+go build -o gapmap ./cmd/gapmap
 ```
 
 Requires Go 1.25+. Pure Go build — no CGO required.
 
 ## Prerequisites
 
-who-wrote-it shells out to external CLI tools at runtime:
+gap-map shells out to external CLI tools at runtime:
 
 | Tool | Required | Used For |
 |------|----------|----------|
@@ -111,34 +111,34 @@ Verify they're installed:
 
 ```bash
 git --version   # any recent version works
-gh --version    # only needed if you use `whowroteit pr-comment`
+gh --version    # only needed if you use `gapmap pr-comment`
 ```
 
 ## Quick Start
 
 ```bash
 # Start the daemon (runs in background)
-whowroteit start
+gapmap start
 
 # Check if it's running
-whowroteit ping
+gapmap ping
 
 # View daemon status
-whowroteit status
+gapmap status
 
 # Generate attribution report
-whowroteit analyze
+gapmap analyze
 
 # Analyze a single file
-whowroteit analyze --file internal/daemon/daemon.go
+gapmap analyze --file internal/daemon/daemon.go
 
 # Stop the daemon
-whowroteit stop
+gapmap stop
 ```
 
 ## Configuration
 
-Config lives at `~/.whowroteit/config.json`. All fields are optional — sensible defaults are used.
+Config lives at `~/.gapmap/config.json`. All fields are optional — sensible defaults are used.
 
 ```json
 {
@@ -147,16 +147,16 @@ Config lives at `~/.whowroteit/config.json`. All fields are optional — sensibl
 }
 ```
 
-Data is stored in `~/.whowroteit/` by default (`data_dir`, `socket_path`, and `db_path` can be overridden in config).
+Data is stored in `~/.gapmap/` by default (`data_dir`, `socket_path`, and `db_path` can be overridden in config).
 
 ## CLI Commands
 
-### `whowroteit analyze`
+### `gapmap analyze`
 
 Project-level attribution report with authorship spectrum, work type distribution, and per-file breakdown.
 
 ```
-Who Wrote It - Attribution Report
+Gap Map - Attribution Report
 ========================================
 
 Project: /Users/dev/myproject
@@ -185,28 +185,28 @@ boilerplate        low          1       57  90.0%    1.0
 
 Use `--json` for machine-readable output. Use `--file` for single-file detail.
 
-### `whowroteit pr-comment`
+### `gapmap pr-comment`
 
 Posts a collaboration summary to a GitHub PR.
 
 ```bash
 # Auto-detects owner/repo/PR from git context
-whowroteit pr-comment --token $GITHUB_TOKEN
+gapmap pr-comment --token $GITHUB_TOKEN
 
 # Or specify explicitly
-whowroteit pr-comment --owner myorg --repo myrepo --pr 42 --token $GITHUB_TOKEN
+gapmap pr-comment --owner myorg --repo myrepo --pr 42 --token $GITHUB_TOKEN
 
 # Preview without posting
-whowroteit pr-comment --dry-run
+gapmap pr-comment --dry-run
 ```
 
-### `whowroteit survival`
+### `gapmap survival`
 
 Shows how AI-written code persists across subsequent commits by comparing attribution content hashes against current git blame.
 
 ```bash
-whowroteit survival
-whowroteit survival --json
+gapmap survival
+gapmap survival --json
 ```
 
 Breaks down survival rates by authorship level and work type.
@@ -214,7 +214,7 @@ Breaks down survival rates by authorship level and work type.
 ## Architecture
 
 ```
-cmd/whowroteit/          CLI entry point (cobra)
+cmd/gapmap/          CLI entry point (cobra)
 internal/
   authorship/            3-level authorship classifier
   config/                JSON config loading with defaults
@@ -238,7 +238,7 @@ Currently supports **Claude Code** via the SessionProvider interface. The archit
 
 ## Privacy
 
-All data stays local. No telemetry, no cloud, no external API calls (except GitHub PR comments when you explicitly request them). The SQLite database lives in `~/.whowroteit/`.
+All data stays local. No telemetry, no cloud, no external API calls (except GitHub PR comments when you explicitly request them). The SQLite database lives in `~/.gapmap/`.
 
 ## Known Limitations
 

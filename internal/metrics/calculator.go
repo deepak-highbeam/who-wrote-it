@@ -5,8 +5,8 @@
 package metrics
 
 import (
-	"github.com/anthropic/who-wrote-it/internal/store"
-	"github.com/anthropic/who-wrote-it/internal/worktype"
+	"github.com/anthropic/gap-map/internal/store"
+	"github.com/anthropic/gap-map/internal/worktype"
 )
 
 // FileMetrics holds computed metrics for a single file.

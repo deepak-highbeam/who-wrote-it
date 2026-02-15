@@ -1,4 +1,4 @@
-module github.com/anthropic/who-wrote-it
+module github.com/anthropic/gap-map
 
 go 1.25.7
 

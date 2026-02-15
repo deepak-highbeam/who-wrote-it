@@ -9,8 +9,8 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 
-	"github.com/anthropic/who-wrote-it/internal/config"
-	"github.com/anthropic/who-wrote-it/internal/store"
+	"github.com/anthropic/gap-map/internal/config"
+	"github.com/anthropic/gap-map/internal/store"
 )
 
 // Watcher monitors file system events, filters ignored paths, debounces

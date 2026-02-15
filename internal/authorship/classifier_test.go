@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anthropic/who-wrote-it/internal/store"
+	"github.com/anthropic/gap-map/internal/store"
 )
 
 var baseTime = time.Date(2026, 2, 9, 12, 0, 0, 0, time.UTC)
